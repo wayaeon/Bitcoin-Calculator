@@ -1,8 +1,7 @@
 "use client"
 
-import { Hero } from '@/components/ui/animated-hero'
-import Image from 'next/image'
+import { BTCCalculator } from '@/components/btc-calculator'
 
 export default function Home() {
-  return <Hero />
+  return <BTCCalculator />
 }
