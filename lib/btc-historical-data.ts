@@ -55,7 +55,7 @@ function getMockHistoricalData(): BTCHistoricalData[] {
   const endDate = new Date('2024-12-31')
   const currentDate = new Date(startDate)
   
-  let basePrice = 8000 // Starting price in 2020
+  const basePrice = 8000 // Starting price in 2020
   
   while (currentDate <= endDate) {
     // Simulate realistic Bitcoin price movements

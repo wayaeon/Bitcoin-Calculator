@@ -24,7 +24,6 @@ interface Currency {
 export const BTCChartTooltip = ({
   active,
   payload,
-  label,
   selectedCurrency = 'USD',
   selectedCurrencySymbol = '$',
   data = [],
@@ -133,7 +132,6 @@ export const BTCChartTooltip = ({
 export const BTCChartTooltipEnhanced = ({
   active,
   payload,
-  label,
   selectedCurrency = 'USD',
   selectedCurrencySymbol = '$',
   data = [],

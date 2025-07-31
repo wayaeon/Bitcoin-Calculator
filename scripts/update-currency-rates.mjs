@@ -5,7 +5,7 @@
  * This script can be run manually or scheduled via cron
  */
 
-import { updateCurrencyRates, shouldUpdateCurrencyRates } from '../lib/currency-rate-updater.js'
+import { updateCurrencyRates, shouldUpdateCurrencyRates } from '../lib/currency-rate-updater.ts'
 
 async function main() {
   try {

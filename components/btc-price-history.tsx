@@ -120,6 +120,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
         'PLN': 3.8
       }
       setExchangeRates(defaultRates)
+      console.log('Using default exchange rates:', defaultRates)
     }
   }, [currencies])
 
@@ -229,12 +230,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       
       setData(filteredData)
       
-      // Calculate current price and change
-      const latest = filteredData[filteredData.length - 1]
-      const earliest = filteredData[0]
-      
-      setCurrentPrice(latest.price)
-      setPriceChange(((latest.price - earliest.price) / earliest.price) * 100)
+      // Note: current price and price change will be calculated by the currency conversion useEffect
       
     } catch (error) {
       console.error('Error loading data:', error)
@@ -299,9 +295,9 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     }
   }, [convertedData, selectedCurrency, selectedCurrencyInfo, onDataUpdate])
 
-  // Convert data when currency changes
+  // Convert data when currency changes (only when rates are available)
   useEffect(() => {
-    if (data.length > 0) {
+    if (data.length > 0 && Object.keys(exchangeRates).length > 0) {
       const converted = convertDataToCurrency(data, selectedCurrency)
       setConvertedData(converted)
       
@@ -314,12 +310,29 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
         setPriceChange(((latest.price - earliest.price) / earliest.price) * 100)
       }
     }
-  }, [data, selectedCurrency, convertDataToCurrency])
+  }, [data, selectedCurrency, convertDataToCurrency, exchangeRates])
 
   // Fetch exchange rates on mount
   useEffect(() => {
     fetchExchangeRates()
   }, [fetchExchangeRates])
+
+  // Initial currency conversion when data and rates are available
+  useEffect(() => {
+    if (data.length > 0 && Object.keys(exchangeRates).length > 0) {
+      const converted = convertDataToCurrency(data, selectedCurrency)
+      setConvertedData(converted)
+      
+      // Update current price and price change for the new currency
+      if (converted.length > 0) {
+        const latest = converted[converted.length - 1]
+        const earliest = converted[0]
+        
+        setCurrentPrice(latest.price)
+        setPriceChange(((latest.price - earliest.price) / earliest.price) * 100)
+      }
+    }
+  }, [data, exchangeRates, selectedCurrency, convertDataToCurrency])
 
   // Calculate Y-axis domain for better chart visibility
   const yAxisDomain = useMemo(() => {

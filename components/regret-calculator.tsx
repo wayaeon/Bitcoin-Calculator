@@ -135,7 +135,7 @@ export const RegretCalculator = ({
       const investmentTimestamp = investmentDate.getTime()
       
       // First, try to find exact date match using YYYY-MM-DD format
-      let exactMatch = convertedData.find(data => {
+      const exactMatch = convertedData.find(data => {
         const dataDate = new Date(data.timestamp)
         const dataDateStr = dataDate.toISOString().split('T')[0] // YYYY-MM-DD format
         const investmentDateStr = investmentDate.toISOString().split('T')[0] // YYYY-MM-DD format
