@@ -37,6 +37,7 @@ export interface CalculatorInputs {
   
   // Timing
   startYear: number
+  endYear: number
   
   // Growth parameters
   globalWealthCAGR: number
@@ -90,12 +91,14 @@ export function generateBTCTrajectory(
   
   // Start with current BTC price
   const currentBTCPrice = BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
+  const currentYear = 2024 // Current year
   
-  for (let year = 0; year <= fullWealthCaptureYear; year++) {
-    const globalWealth = calculateGlobalWealth(year, cagr)
+  for (let year = currentYear; year <= fullWealthCaptureYear; year++) {
+    const yearsFromNow = year - currentYear
+    const globalWealth = calculateGlobalWealth(yearsFromNow, cagr)
     
-    // Calculate BTC price using exponential growth model
-    const btcPrice = currentBTCPrice * Math.pow(1 + btcCAGR, year)
+    // Calculate BTC price using exponential growth model from current year
+    const btcPrice = currentBTCPrice * Math.pow(1 + btcCAGR, yearsFromNow)
     
     trajectory.push({
       year,
@@ -113,7 +116,8 @@ export function calculateOneTimeBTCHoldings(
   investmentYear: number,
   trajectory: BTCTrajectory[]
 ): number {
-  const btcPrice = trajectory[investmentYear]?.btcPrice || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
+  const trajectoryEntry = trajectory.find(t => t.year === investmentYear)
+  const btcPrice = trajectoryEntry?.btcPrice || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
   return amount / btcPrice
 }
 
@@ -136,7 +140,8 @@ export function calculateDCABTCHoldings(
   const investmentsPerYear = frequencyMap[frequency]
   
   for (let year = startYear; year <= endYear; year++) {
-    const btcPrice = trajectory[year]?.btcPrice || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
+    const trajectoryEntry = trajectory.find(t => t.year === year)
+    const btcPrice = trajectoryEntry?.btcPrice || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
     const yearlyInvestment = amount * investmentsPerYear
     totalBTCHoldings += yearlyInvestment / btcPrice
   }
@@ -152,17 +157,22 @@ export function generateYearlyBreakdown(
   const breakdown: YearlyBreakdown[] = []
   let cumulativeInvestment = 0
   let btcHoldings = 0
+  const currentYear = 2024
   
-  for (let year = 0; year <= BTC_CALCULATOR_CONSTANTS.FULL_WEALTH_CAPTURE_YEAR; year++) {
-    const globalWealth = trajectory[year]?.globalWealth || 0
-    const btcPrice = trajectory[year]?.btcPrice || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
+  for (let year = currentYear; year <= inputs.endYear; year++) {
+    const trajectoryEntry = trajectory.find(t => t.year === year)
+    const globalWealth = trajectoryEntry?.globalWealth || 0
+    const btcPrice = trajectoryEntry?.btcPrice || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
     
     let investmentThisYear = 0
     
-    if (inputs.investmentType === 'one-time' && year === inputs.startYear) {
+    // Handle start year logic - if startYear is 0, it means "now" (current year)
+    const actualStartYear = inputs.startYear === 0 ? currentYear : inputs.startYear
+    
+    if (inputs.investmentType === 'one-time' && year === actualStartYear) {
       investmentThisYear = inputs.investmentAmount
       btcHoldings += inputs.investmentAmount / btcPrice
-    } else if (inputs.investmentType === 'dca' && year >= inputs.startYear) {
+    } else if (inputs.investmentType === 'dca' && year >= actualStartYear) {
       const frequencyMap = {
         daily: 365,
         weekly: 52,
@@ -191,11 +201,11 @@ export function generateYearlyBreakdown(
 
 // Main calculation function
 export function calculateBTCFutureValue(inputs: CalculatorInputs): CalculatorOutputs {
-  // Generate BTC price trajectory
+  // Generate BTC trajectory based on inputs
   const trajectory = generateBTCTrajectory(
-    BTC_CALCULATOR_CONSTANTS.FULL_WEALTH_CAPTURE_YEAR,
-    inputs.globalWealthCAGR / 100,
-    inputs.btcCAGR / 100
+    inputs.endYear,
+    inputs.globalWealthCAGR,
+    inputs.btcCAGR
   )
   
   // Calculate BTC holdings based on investment type
@@ -214,7 +224,7 @@ export function calculateBTCFutureValue(inputs: CalculatorInputs): CalculatorOut
       inputs.dcaAmount,
       inputs.dcaFrequency,
       inputs.startYear,
-      BTC_CALCULATOR_CONSTANTS.FULL_WEALTH_CAPTURE_YEAR,
+      inputs.endYear,
       trajectory
     )
     
@@ -224,12 +234,12 @@ export function calculateBTCFutureValue(inputs: CalculatorInputs): CalculatorOut
       monthly: 12
     }
     
-    const yearsOfInvestment = BTC_CALCULATOR_CONSTANTS.FULL_WEALTH_CAPTURE_YEAR - inputs.startYear + 1
+    const yearsOfInvestment = inputs.endYear - inputs.startYear + 1
     totalInvestment = inputs.dcaAmount * frequencyMap[inputs.dcaFrequency] * yearsOfInvestment
   }
   
   // Calculate future value
-  const finalBTCPrice = trajectory[BTC_CALCULATOR_CONSTANTS.FULL_WEALTH_CAPTURE_YEAR]?.btcPrice || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
+  const finalBTCPrice = trajectory[inputs.endYear]?.btcPrice || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
   const futureValue = futureBTCHoldings * finalBTCPrice
   
   // Calculate returns
@@ -237,7 +247,7 @@ export function calculateBTCFutureValue(inputs: CalculatorInputs): CalculatorOut
   const returnPercentage = totalInvestment > 0 ? (totalReturn / totalInvestment) * 100 : 0
   
   // Calculate global wealth metrics
-  const globalWealthAtYear30 = trajectory[BTC_CALCULATOR_CONSTANTS.FULL_WEALTH_CAPTURE_YEAR]?.globalWealth || 0
+  const globalWealthAtYear30 = trajectory[inputs.endYear]?.globalWealth || 0
   const percentageOfGlobalWealth = globalWealthAtYear30 > 0 ? (futureValue / globalWealthAtYear30) * 100 : 0
   
   // Generate yearly breakdown
@@ -256,7 +266,11 @@ export function calculateBTCFutureValue(inputs: CalculatorInputs): CalculatorOut
 }
 
 // Formatting utilities
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number | undefined | null): string {
+  if (amount === undefined || amount === null || isNaN(amount)) {
+    return '$0.00'
+  }
+  
   if (amount >= 1_000_000_000_000) {
     return `$${(amount / 1_000_000_000_000).toFixed(2)}T`
   } else if (amount >= 1_000_000_000) {
@@ -270,11 +284,17 @@ export function formatCurrency(amount: number): string {
   }
 }
 
-export function formatPercentage(value: number): string {
+export function formatPercentage(value: number | undefined | null): string {
+  if (value === undefined || value === null || isNaN(value)) {
+    return '0.00%'
+  }
   return `${value.toFixed(2)}%`
 }
 
-export function formatBTC(amount: number): string {
+export function formatBTC(amount: number | undefined | null): string {
+  if (amount === undefined || amount === null || isNaN(amount)) {
+    return '0.00000000 BTC'
+  }
   return `${amount.toFixed(8)} BTC`
 }
 

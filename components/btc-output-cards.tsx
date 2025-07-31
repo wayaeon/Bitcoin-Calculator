@@ -10,6 +10,17 @@ interface BTCOutputCardsProps {
 }
 
 export function BTCOutputCards({ outputs }: BTCOutputCardsProps) {
+  // Safety check for outputs
+  if (!outputs) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="h-32 bg-gray-800/50 rounded-lg flex items-center justify-center">
+          <div className="text-gray-400">No data available</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {/* Future BTC Value */}
@@ -20,7 +31,7 @@ export function BTCOutputCards({ outputs }: BTCOutputCardsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-green-600">
-            {formatCurrency(outputs.futureBTCValue)}
+            {formatCurrency(outputs.futureValue)}
           </div>
           <p className="text-xs text-muted-foreground">
             Value at year {outputs.yearlyBreakdown[outputs.yearlyBreakdown.length - 1]?.year || 30}
@@ -36,7 +47,7 @@ export function BTCOutputCards({ outputs }: BTCOutputCardsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-orange-600">
-            {formatBTC(outputs.totalBTCHoldings)}
+            {formatBTC(outputs.futureBTCHoldings)}
           </div>
           <p className="text-xs text-muted-foreground">
             Total Bitcoin accumulated

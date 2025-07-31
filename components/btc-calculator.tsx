@@ -19,7 +19,12 @@ import {
   BarChart3,
   Coins,
   Globe,
-  Rocket
+  Rocket,
+  ChevronUp,
+  ChevronDown,
+  Menu,
+  Settings,
+  Share2
 } from 'lucide-react'
 import { 
   BTC_CALCULATOR_CONSTANTS,
@@ -34,7 +39,9 @@ import {
 import { BTCChart } from './btc-chart'
 import { BTCOutputCards } from './btc-output-cards'
 import { BTCPriceHistory } from './btc-price-history'
-import Galaxy from './Galaxy'
+import { FutureValueCalculator } from './future-value-calculator'
+import { RegretCalculator } from './regret-calculator'
+// import Galaxy from './Galaxy'
 
 export function BTCCalculator() {
   const [inputs, setInputs] = useState<CalculatorInputs>({
@@ -42,13 +49,24 @@ export function BTCCalculator() {
     investmentAmount: 10000,
     dcaFrequency: 'monthly',
     dcaAmount: 1000,
-    startYear: 0,
+    startYear: 2024,
+    endYear: 2050,
     globalWealthCAGR: 4,
     btcCAGR: 15
   })
   const [outputs, setOutputs] = useState<CalculatorOutputs | null>(null)
   const [currentBTCPrice, setCurrentBTCPrice] = useState<number>(BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE)
   const [isLoading, setIsLoading] = useState(false)
+  
+  // Calculator popup states
+  const [isFutureValueOpen, setIsFutureValueOpen] = useState(false)
+  const [isRegretOpen, setIsRegretOpen] = useState(false)
+  const [isCalculatorExpanded, setIsCalculatorExpanded] = useState(false)
+  
+  // State to store price history data
+  const [priceHistoryData, setPriceHistoryData] = useState<any[]>([])
+  const [selectedCurrency, setSelectedCurrency] = useState('USD')
+  const [selectedCurrencySymbol, setSelectedCurrencySymbol] = useState('$')
 
   const handleCalculate = async () => {
     try {
@@ -66,325 +84,169 @@ export function BTCCalculator() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 relative overflow-hidden">
-      {/* Galaxy Background */}
-      <div className="absolute inset-0">
-        <Galaxy 
-          starSpeed={0.3}
-          density={0.8}
-          hueShift={30}
-          speed={0.8}
-          mouseInteraction={true}
-          glowIntensity={0.4}
-          saturation={0.2}
-          mouseRepulsion={true}
-          twinkleIntensity={0.4}
-          rotationSpeed={0.05}
-          repulsionStrength={1.5}
-          transparent={true}
-        />
+      {/* Simple Static Background instead of Galaxy */}
+      <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-black to-gray-900">
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,165,0,0.1),transparent_50%)]"></div>
+          <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-[radial-gradient(circle,rgba(59,130,246,0.1),transparent_70%)]"></div>
+          <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-[radial-gradient(circle,rgba(139,92,246,0.1),transparent_70%)]"></div>
+        </div>
       </div>
       
-      {/* Header Section */}
-      <div className="relative z-10 bg-gradient-to-r from-orange-600/90 via-amber-600/90 to-yellow-600/90 backdrop-blur-sm text-white">
-        <div className="container mx-auto px-6 py-8">
-          <div className="text-center space-y-4">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Bitcoin className="h-12 w-12 text-yellow-300" />
-              <h1 className="text-5xl font-bold">Bitcoin Future Value Calculator</h1>
-              <Bitcoin className="h-12 w-12 text-yellow-300" />
+      {/* Redesigned Header Section */}
+      <div className="relative z-10 bg-gray-900/95 backdrop-blur-sm border-b border-gray-800/50 shadow-lg">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Left Side - Logo and Title */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Bitcoin className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-white tracking-tight">
+                    Bitcoin Analytics
+                  </h1>
+                  <p className="text-xs text-gray-400 font-medium">
+                    Price History & Projections
+                  </p>
+                </div>
+              </div>
             </div>
-            <p className="text-xl text-orange-100 max-w-3xl mx-auto">
-              Project Bitcoin's potential value based on global wealth growth and your investment strategy. 
-              This model assumes BTC could capture a portion of global wealth by year 30, 
-              with exponential price growth from current levels.
-            </p>
+
+            {/* Center - Live Price Display */}
+            <div className="hidden lg:flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-xs text-gray-400 mb-1">Current BTC Price</div>
+                <div className="text-lg font-bold text-green-400">
+                  $117,877.42
+                </div>
+              </div>
+              <div className="w-px h-8 bg-gray-700"></div>
+              <div className="text-center">
+                <div className="text-xs text-gray-400 mb-1">24h Change</div>
+                <div className="text-sm font-semibold text-green-400">
+                  +2.34%
+                </div>
+              </div>
+              <div className="w-px h-8 bg-gray-700"></div>
+              <div className="text-center">
+                <div className="text-xs text-gray-400 mb-1">Market Cap</div>
+                <div className="text-sm font-semibold text-white">
+                  $2.3T
+                </div>
+              </div>
+            </div>
+
+            {/* Right Side - Actions */}
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-9 px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
+              >
+                <Share2 className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-9 px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <div className="w-px h-6 bg-gray-700"></div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-9 px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-8 space-y-8 relative z-10">
-        {/* BTC Price History Section - Top */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 mb-4">
-            <TrendingUp className="h-6 w-6 text-orange-400" />
-            <h2 className="text-2xl font-bold text-white">Live Bitcoin Price History</h2>
-          </div>
-          <BTCPriceHistory />
+      <div className="container mx-auto px-4 py-2 relative z-10 h-screen flex items-center justify-center">
+        {/* Full Window Price History */}
+        <div className="w-full max-w-7xl">
+          <BTCPriceHistory 
+            onDataUpdate={(data, currency, currencySymbol) => {
+              setPriceHistoryData(data)
+              setSelectedCurrency(currency)
+              setSelectedCurrencySymbol(currencySymbol)
+            }}
+          />
         </div>
 
-        {/* Calculator Section - Bottom */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Input Panel */}
-          <div className="lg:col-span-1 space-y-6">
-            <Card className="border-2 border-orange-500/30 bg-gray-900/80 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-orange-600 to-amber-600 text-white">
-                <CardTitle className="flex items-center gap-2">
-                  <Calculator className="h-5 w-5" />
-                  Investment Parameters
-                </CardTitle>
-                <CardDescription className="text-orange-100">
-                  Configure your Bitcoin investment strategy
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                {/* Investment Type */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-200">Investment Strategy</Label>
-                  <Select 
-                    value={inputs.investmentType} 
-                    onValueChange={(value: 'one-time' | 'dca') => 
-                      setInputs(prev => ({ ...prev, investmentType: value }))
-                    }
-                  >
-                    <SelectTrigger className="border-orange-500/30 bg-gray-800 text-white focus:border-orange-400">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-800 border-gray-700">
-                      <SelectItem value="one-time">One-Time Investment</SelectItem>
-                      <SelectItem value="dca">Dollar-Cost Averaging (DCA)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Investment Amount */}
-                {inputs.investmentType === 'one-time' ? (
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-200">Investment Amount</Label>
-                    <Input
-                      type="number"
-                      value={inputs.investmentAmount}
-                      onChange={(e) => setInputs(prev => ({ 
-                        ...prev, 
-                        investmentAmount: parseFloat(e.target.value) || 0 
-                      }))}
-                      className="border-orange-500/30 bg-gray-800 text-white focus:border-orange-400"
-                      placeholder="Enter amount"
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-200">DCA Frequency</Label>
-                      <Select 
-                        value={inputs.dcaFrequency} 
-                        onValueChange={(value: 'daily' | 'weekly' | 'monthly') => 
-                          setInputs(prev => ({ ...prev, dcaFrequency: value }))
-                        }
-                      >
-                        <SelectTrigger className="border-orange-500/30 bg-gray-800 text-white focus:border-orange-400">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-800 border-gray-700">
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-gray-200">DCA Amount</Label>
-                      <Input
-                        type="number"
-                        value={inputs.dcaAmount}
-                        onChange={(e) => setInputs(prev => ({ 
-                          ...prev, 
-                          dcaAmount: parseFloat(e.target.value) || 0 
-                        }))}
-                        className="border-orange-500/30 bg-gray-800 text-white focus:border-orange-400"
-                        placeholder="Enter amount"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Start Year */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-200">Start Year (0 = Now)</Label>
-                  <Input
-                    type="number"
-                    value={inputs.startYear}
-                    onChange={(e) => setInputs(prev => ({ 
-                      ...prev, 
-                      startYear: parseInt(e.target.value) || 0 
-                    }))}
-                    className="border-orange-500/30 bg-gray-800 text-white focus:border-orange-400"
-                    placeholder="Enter year"
-                  />
-                </div>
-
-                {/* Global Wealth CAGR */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-200">
-                    Global Wealth CAGR: {inputs.globalWealthCAGR}%
-                  </Label>
-                  <Slider
-                    value={[inputs.globalWealthCAGR]}
-                    onValueChange={(value) => setInputs(prev => ({ 
-                      ...prev, 
-                      globalWealthCAGR: value[0] 
-                    }))}
-                    max={10}
-                    min={1}
-                    step={0.1}
-                    className="w-full"
-                  />
-                </div>
-
-                {/* BTC CAGR */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-200">
-                    BTC CAGR: {inputs.btcCAGR}%
-                  </Label>
-                  <Slider
-                    value={[inputs.btcCAGR]}
-                    onValueChange={(value) => setInputs(prev => ({ 
-                      ...prev, 
-                      btcCAGR: value[0] 
-                    }))}
-                    max={50}
-                    min={5}
-                    step={1}
-                    className="w-full"
-                  />
-                </div>
-
-                {/* Current BTC Price Display */}
-                <Card className="bg-gradient-to-r from-green-900/80 to-emerald-900/80 border-green-500/30 backdrop-blur-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm text-green-300">Current BTC Price</CardTitle>
-                    <CardDescription className="text-xs text-green-400">Live from CoinGecko</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-green-400">
-                      {formatCurrency(currentBTCPrice)}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Calculate Button */}
-                <Button 
-                  onClick={handleCalculate} 
-                  className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-semibold py-3"
-                  size="lg"
-                  disabled={isLoading}
+        {/* Single Expandable Calculator Widget */}
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className="relative">
+            {/* Main Calculator Button */}
+            <button
+              onClick={() => setIsCalculatorExpanded(!isCalculatorExpanded)}
+              className="w-16 h-16 bg-gradient-to-br from-orange-600/90 via-orange-500/90 to-amber-600/90 hover:from-orange-700/90 hover:via-orange-600/90 hover:to-amber-700/90 rounded-2xl shadow-2xl hover:shadow-orange-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white text-2xl backdrop-blur-sm border border-orange-400/20"
+              title="Calculators - Future Value & Regret Calculators"
+            >
+              <Calculator className="h-8 w-8" />
+            </button>
+            
+            {/* Expandable Calculator Options */}
+            {isCalculatorExpanded && (
+              <div className="absolute bottom-full right-0 mb-3 space-y-2">
+                {/* Future Value Calculator Button */}
+                <button
+                  onClick={() => {
+                    setIsFutureValueOpen(true)
+                    setIsCalculatorExpanded(false)
+                  }}
+                  className="w-14 h-14 bg-gradient-to-br from-blue-600/90 via-blue-500/90 to-cyan-600/90 hover:from-blue-700/90 hover:via-blue-600/90 hover:to-cyan-700/90 rounded-xl shadow-xl hover:shadow-blue-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white text-xl backdrop-blur-sm border border-blue-400/20"
+                  title="Future Value Calculator"
                 >
-                  {isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Calculating...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4" />
-                      Calculate Future Value
-                    </div>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Output Panel */}
-          <div className="lg:col-span-2 space-y-6">
-            {outputs && (
-              <>
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <Card className="bg-gradient-to-br from-green-900/80 to-emerald-900/80 border-green-500/30 backdrop-blur-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm text-green-300 flex items-center gap-2">
-                        <Coins className="h-4 w-4" />
-                        Future BTC Holdings
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-green-400">
-                        {formatBTC(outputs.futureBTCHoldings)}
-                      </div>
-                      <p className="text-xs text-green-400 mt-1">BTC</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-gradient-to-br from-blue-900/80 to-cyan-900/80 border-blue-500/30 backdrop-blur-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm text-blue-300 flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" />
-                        Future Value
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-blue-400">
-                        {formatCurrency(outputs.futureValue)}
-                      </div>
-                      <p className="text-xs text-blue-400 mt-1">USD</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-gradient-to-br from-purple-900/80 to-violet-900/80 border-purple-500/30 backdrop-blur-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm text-purple-300 flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
-                        % Global Wealth
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-purple-400">
-                        {formatPercentage(outputs.percentageOfGlobalWealth)}
-                      </div>
-                      <p className="text-xs text-purple-400 mt-1">of total wealth</p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Chart */}
-                <Card className="border-2 border-orange-500/30 bg-gray-900/80 backdrop-blur-sm">
-                  <CardHeader className="bg-gradient-to-r from-orange-600 to-amber-600 text-white">
-                    <CardTitle className="flex items-center gap-2">
-                      <BarChart3 className="h-5 w-5" />
-                      Investment Trajectory
-                    </CardTitle>
-                    <CardDescription className="text-orange-100">
-                      Visualize your investment growth over time
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <BTCChart outputs={outputs} inputs={inputs} />
-                  </CardContent>
-                </Card>
-
-                {/* Detailed Output Cards */}
-                <BTCOutputCards outputs={outputs} />
-              </>
+                  📈
+                </button>
+                
+                {/* Regret Calculator Button */}
+                <button
+                  onClick={() => {
+                    setIsRegretOpen(true)
+                    setIsCalculatorExpanded(false)
+                  }}
+                  className="w-14 h-14 bg-gradient-to-br from-red-600/90 via-red-500/90 to-pink-600/90 hover:from-red-700/90 hover:via-red-600/90 hover:to-pink-700/90 rounded-xl shadow-xl hover:shadow-red-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white text-xl backdrop-blur-sm border border-red-400/20"
+                  title="Regret Calculator"
+                >
+                  😭
+                </button>
+              </div>
             )}
-
-            {!outputs && (
-              <Card className="border-2 border-orange-500/30 bg-gray-900/80 backdrop-blur-sm">
-                <CardHeader className="bg-gradient-to-r from-orange-600 to-amber-600 text-white">
-                  <CardTitle className="flex items-center gap-2">
-                    <Rocket className="h-5 w-5" />
-                    Ready to Calculate
-                  </CardTitle>
-                  <CardDescription className="text-orange-100">
-                    Configure your parameters and click calculate to see your Bitcoin future
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="text-center py-12">
-                    <Target className="h-16 w-16 text-orange-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-200 mb-2">
-                      Start Your Bitcoin Journey
-                    </h3>
-                    <p className="text-gray-400 max-w-md mx-auto">
-                      Set your investment parameters above and click "Calculate Future Value" 
-                      to see how your Bitcoin investment could grow over time.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            
+            {/* Expand/Collapse Icon */}
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gray-800/90 rounded-full flex items-center justify-center border border-gray-600/50">
+              {isCalculatorExpanded ? (
+                <ChevronDown className="h-3 w-3 text-gray-300" />
+              ) : (
+                <ChevronUp className="h-3 w-3 text-gray-300" />
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Calculator Popups */}
+      <FutureValueCalculator
+        isOpen={isFutureValueOpen}
+        onClose={() => setIsFutureValueOpen(false)}
+        selectedCurrency={selectedCurrency}
+        selectedCurrencySymbol={selectedCurrencySymbol}
+      />
+      
+      <RegretCalculator
+        isOpen={isRegretOpen}
+        onClose={() => setIsRegretOpen(false)}
+        selectedCurrency={selectedCurrency}
+        selectedCurrencySymbol={selectedCurrencySymbol}
+        convertedData={priceHistoryData}
+      />
     </div>
   )
 } 
