@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw, TrendingUp, Database, Clock, BarChart3 } from 'lucide-react'
+import { RefreshCw, TrendingUp, Database, Clock, BarChart3, Calendar, DollarSign } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { 
   ChartContainer,
@@ -69,29 +69,34 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     { code: 'PLN', symbol: 'zł', name: 'Polish Złoty' }
   ], [])
 
-  // Fetch exchange rates when currency changes
+  // Fetch exchange rates from stored file
   const fetchExchangeRates = useCallback(async () => {
     try {
-      console.log('Fetching exchange rates...')
-      const rates = await getSupportedCurrencies()
+      console.log('Loading exchange rates from stored file...')
+      const response = await fetch('/api/currency?base=USD')
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch currency rates')
+      }
+      
+      const data = await response.json()
       const rateMap: {[key: string]: number} = {}
       
-      // Get rates for all supported currencies
-      for (const currency of rates) {
-        if (currency !== 'USD') {
-          const converted = await convertCurrency(1, 'USD', currency)
-          rateMap[currency] = converted
-          console.log(`Rate for ${currency}: ${converted}`)
+      // Build rate map from stored data
+      for (const currency of currencies) {
+        if (data.data[currency.code]) {
+          rateMap[currency.code] = data.data[currency.code].value
+          console.log(`Rate for ${currency.code}: ${data.data[currency.code].value}`)
         } else {
-          rateMap[currency] = 1
+          rateMap[currency.code] = 1 // Fallback for USD
         }
       }
       
       setExchangeRates(rateMap)
-      console.log('Exchange rates loaded:', rateMap)
+      console.log('Exchange rates loaded from file:', rateMap)
     } catch (error) {
-      console.error('Error fetching exchange rates:', error)
-      // Set default rates if API fails
+      console.error('Error loading exchange rates from file:', error)
+      // Set default rates if file read fails
       const defaultRates = {
         'USD': 1,
         'EUR': 0.85,
@@ -116,7 +121,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       }
       setExchangeRates(defaultRates)
     }
-  }, [])
+  }, [currencies])
 
   // Convert data to selected currency
   const convertDataToCurrency = useCallback((data: BTCPriceData[], targetCurrency: string) => {
@@ -299,6 +304,15 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     if (data.length > 0) {
       const converted = convertDataToCurrency(data, selectedCurrency)
       setConvertedData(converted)
+      
+      // Update current price and price change for the new currency
+      if (converted.length > 0) {
+        const latest = converted[converted.length - 1]
+        const earliest = converted[0]
+        
+        setCurrentPrice(latest.price)
+        setPriceChange(((latest.price - earliest.price) / earliest.price) * 100)
+      }
     }
   }, [data, selectedCurrency, convertDataToCurrency])
 
@@ -349,96 +363,105 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     )
   }, [currencies, selectedCurrency, data, convertedData])
 
-  // Create chart data with only starting and current price markers
+  // Create chart data without markers
   const chartData = useMemo(() => {
     if (convertedData.length === 0) return []
     
-    const startPrice = convertedData[0]
-    const endPrice = convertedData[convertedData.length - 1]
-    
-    return convertedData.map((item, index) => {
-      const isStart = index === 0
-      const isEnd = index === convertedData.length - 1
-      
+    return convertedData.map((item) => {
       return {
         ...item,
-        showDot: isStart || isEnd,
-        dotColor: isStart ? '#8b5cf6' : '#22c55e', // Purple for start, green for end
-        dotLabel: isEnd ? 'Current' : null // Removed 'Starting' label
+        showDot: false
       }
     })
   }, [convertedData])
 
   return (
     <div className={`w-full h-full ${className}`}>
-      {/* Top Controls and Stats Section */}
+      {/* Single Horizontal Line Layout */}
       <div className="mb-6">
-        {/* Controls Row */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex gap-3">
-            <Select value={timeRange} onValueChange={(value: any) => setTimeRange(value)}>
-              <SelectTrigger className="h-9 text-sm border-gray-600 bg-gray-800 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-800 border-gray-700">
-                <SelectItem value="1D" className="text-white hover:bg-gray-700">1 Day</SelectItem>
-                <SelectItem value="7D" className="text-white hover:bg-gray-700">7 Days</SelectItem>
-                <SelectItem value="30D" className="text-white hover:bg-gray-700">30 Days</SelectItem>
-                <SelectItem value="90D" className="text-white hover:bg-gray-700">90 Days</SelectItem>
-                <SelectItem value="1Y" className="text-white hover:bg-gray-700">1 Year</SelectItem>
-                <SelectItem value="5Y" className="text-white hover:bg-gray-700">5 Years</SelectItem>
-                <SelectItem value="10Y" className="text-white hover:bg-gray-700">10 Years</SelectItem>
-                <SelectItem value="ALL" className="text-white hover:bg-gray-700">All Time</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <Select value={selectedCurrency} onValueChange={(value: any) => setSelectedCurrency(value)}>
-              <SelectTrigger className="h-9 text-sm border-gray-600 bg-gray-800 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-800 border-gray-700">
-                {currencies.map((currency) => (
-                  <SelectItem key={currency.code} value={currency.code} className="text-white hover:bg-gray-700">
-                    {currency.code} - {currency.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex items-center justify-between">
+          {/* Left Side - Dropdowns */}
+          <div className="flex items-center gap-4">
+            {/* Time Range Selector */}
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs text-gray-400 font-medium tracking-wide">Time Range</Label>
+              <Select value={timeRange} onValueChange={(value: any) => setTimeRange(value)}>
+                <SelectTrigger className="h-10 w-32 border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-orange-400" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectItem value="1D" className="text-white hover:bg-gray-700">1 Day</SelectItem>
+                  <SelectItem value="7D" className="text-white hover:bg-gray-700">7 Days</SelectItem>
+                  <SelectItem value="30D" className="text-white hover:bg-gray-700">30 Days</SelectItem>
+                  <SelectItem value="90D" className="text-white hover:bg-gray-700">90 Days</SelectItem>
+                  <SelectItem value="1Y" className="text-white hover:bg-gray-700">1 Year</SelectItem>
+                  <SelectItem value="5Y" className="text-white hover:bg-gray-700">5 Years</SelectItem>
+                  <SelectItem value="10Y" className="text-white hover:bg-gray-700">10 Years</SelectItem>
+                  <SelectItem value="ALL" className="text-white hover:bg-gray-700">All Time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Currency Selector */}
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs text-gray-400 font-medium tracking-wide">Currency</Label>
+              <Select value={selectedCurrency} onValueChange={(value: any) => setSelectedCurrency(value)}>
+                <SelectTrigger className="h-10 w-48 border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-orange-400" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-700">
+                  {currencies.map((currency) => (
+                    <SelectItem key={currency.code} value={currency.code} className="text-white hover:bg-gray-700">
+                      {currency.code} - {currency.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          
+
+          {/* Center - Stats Container */}
+          {convertedData.length > 0 && (
+            <div className="bg-gray-800/30 rounded-xl border border-gray-700/30 px-8 py-4 backdrop-blur-sm">
+              <div className="flex items-center gap-12">
+                <div className="text-center">
+                  <div className="text-xs text-gray-400 mb-2 font-medium tracking-wide">Starting</div>
+                  <div className="text-2xl font-bold text-purple-400 tracking-tight">
+                    {selectedCurrencyInfo?.symbol}{convertedData[0].price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-400 mb-2 font-medium tracking-wide">Change</div>
+                  <div className={`text-2xl font-bold tracking-tight ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-400 mb-2 font-medium tracking-wide">Current</div>
+                  <div className="text-2xl font-bold text-orange-400 tracking-tight">
+                    {selectedCurrencyInfo?.symbol}{currentPrice.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Right Side - Refresh Button */}
           <Button
             size="sm"
             onClick={loadData}
-            className="h-9 text-sm bg-orange-600 hover:bg-orange-700 text-white"
+            className="h-10 px-4 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-medium shadow-lg hover:shadow-orange-500/25 transition-all duration-200"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh Data
           </Button>
         </div>
-
-        {/* Stats Cards Row */}
-        {convertedData.length > 0 && (
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-700/30">
-              <div className="text-sm text-gray-400 mb-1">Starting</div>
-              <div className="text-xl font-bold text-purple-400">
-                {selectedCurrencyInfo?.symbol}{convertedData[0].price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </div>
-            </div>
-            <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-700/30">
-              <div className="text-sm text-gray-400 mb-1">Change</div>
-              <div className={`text-xl font-bold ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
-              </div>
-            </div>
-            <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-700/30">
-              <div className="text-sm text-gray-400 mb-1">Current</div>
-              <div className="text-xl font-bold text-orange-400">
-                {selectedCurrencyInfo?.symbol}{currentPrice.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Chart Section */}
@@ -617,4 +640,4 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       )}
     </div>
   )
-}) 
+})

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "update-currency-rates": "node scripts/update-currency-rates.js"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.10.2",

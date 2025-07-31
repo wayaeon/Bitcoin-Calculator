@@ -1,19 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-const CURRENCY_API_KEY = process.env.CURRENCY_API_KEY
+import { 
+  readCurrencyRatesFromFile, 
+  convertAmount,
+  getCurrencyRate 
+} from '@/lib/currency-rate-updater'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const baseCurrency = searchParams.get('base') || 'USD'
     
-    const response = await fetch(`https://api.currencyapi.com/v3/latest?apikey=${CURRENCY_API_KEY}&base_currency=${baseCurrency}`)
+    // Read rates from stored file
+    const ratesData = await readCurrencyRatesFromFile()
     
-    if (!response.ok) {
-      throw new Error(`Currency API error: ${response.status}`)
+    if (!ratesData) {
+      return NextResponse.json({ error: 'No currency rates available' }, { status: 500 })
     }
     
-    const data = await response.json()
+    // Format response to match the original API structure
+    const data: any = {
+      data: {}
+    }
+    
+    for (const rate of ratesData.rates) {
+      data.data[rate.code] = {
+        code: rate.code,
+        value: rate.rate,
+        last_updated: rate.lastUpdated
+      }
+    }
+    
     return NextResponse.json(data)
   } catch (error) {
     console.error('Error fetching currency rates:', error)
@@ -29,20 +45,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ convertedAmount: amount })
     }
     
-    const response = await fetch(`https://api.currencyapi.com/v3/latest?apikey=${CURRENCY_API_KEY}&base_currency=${fromCurrency}`)
+    // Use stored rates for conversion
+    const convertedAmount = await convertAmount(amount, fromCurrency, toCurrency)
     
-    if (!response.ok) {
-      throw new Error(`Currency API error: ${response.status}`)
-    }
-    
-    const data = await response.json()
-    const rate = data.data[toCurrency]?.value
-    
-    if (!rate) {
-      throw new Error(`Exchange rate not found for ${toCurrency}`)
-    }
-    
-    const convertedAmount = amount * rate
     return NextResponse.json({ convertedAmount })
   } catch (error) {
     console.error('Error converting currency:', error)
