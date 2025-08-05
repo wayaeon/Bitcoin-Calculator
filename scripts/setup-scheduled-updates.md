@@ -4,7 +4,7 @@ This document explains how to set up automatic updates for the BTC price data at
 
 ## How It Works
 
-The system uses your CSV file (`BTC Historical Prices.csv`) as the primary data source and updates it with live CoinGecko API data twice daily. The updates include:
+The system uses your CSV file (`BTC Price History.csv`) as the primary data source and updates it with live CoinGecko API data twice daily. The updates include:
 
 - **Current BTC Price** (Close price)
 - **24h Volume** 

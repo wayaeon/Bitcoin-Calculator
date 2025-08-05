@@ -284,6 +284,126 @@ export function formatCurrency(amount: number | undefined | null): string {
   }
 }
 
+// Format price change amounts with up to 2 non-zero digits
+export function formatPriceChange(value: number): string {
+  if (isNaN(value) || value === 0) {
+    return '0'
+  }
+  
+  const absValue = Math.abs(value)
+  
+  if (absValue >= 1) {
+    // Large values - use locale formatting with 2 decimal places
+    return value.toLocaleString(undefined, { 
+      minimumFractionDigits: 0, 
+      maximumFractionDigits: 2 
+    })
+  } else {
+    // Small values - show up to first 2 non-zero digits
+    const valueStr = value.toString()
+    const decimalIndex = valueStr.indexOf('.')
+    
+    if (decimalIndex === -1) {
+      return value.toFixed(0)
+    }
+    
+    const decimalPart = valueStr.substring(decimalIndex + 1)
+    let significantDigits = 0
+    let result = ''
+    
+    for (let i = 0; i < decimalPart.length && significantDigits < 2; i++) {
+      if (decimalPart[i] !== '0') {
+        significantDigits++
+      }
+      result += decimalPart[i]
+    }
+    
+    const integerPart = valueStr.substring(0, decimalIndex)
+    return `${integerPart}.${result}`
+  }
+}
+
+// Format prices for display in tooltips and info boxes
+export function formatPrice(value: number, currencySymbol: string = '$'): string {
+  if (isNaN(value) || value === 0) {
+    return `${currencySymbol}0`
+  }
+  
+  const absValue = Math.abs(value)
+  
+  if (absValue >= 1) {
+    // Large values - use locale formatting with 2 decimal places
+    return `${currencySymbol}${value.toLocaleString(undefined, { 
+      minimumFractionDigits: 0, 
+      maximumFractionDigits: 2 
+    })}`
+  } else {
+    // Small values - show up to first 2 non-zero digits
+    const valueStr = value.toString()
+    const decimalIndex = valueStr.indexOf('.')
+    
+    if (decimalIndex === -1) {
+      return `${currencySymbol}${value.toFixed(0)}`
+    }
+    
+    const decimalPart = valueStr.substring(decimalIndex + 1)
+    let significantDigits = 0
+    let result = ''
+    
+    for (let i = 0; i < decimalPart.length && significantDigits < 2; i++) {
+      if (decimalPart[i] !== '0') {
+        significantDigits++
+      }
+      result += decimalPart[i]
+    }
+    
+    const integerPart = valueStr.substring(0, decimalIndex)
+    return `${currencySymbol}${integerPart}.${result}`
+  }
+}
+
+// Format Y-axis values with proper order of magnitude and dollar signs
+export function formatYAxisValue(value: number): string {
+  if (isNaN(value) || value === 0) {
+    return '$0'
+  }
+  
+  const absValue = Math.abs(value)
+  
+  // Handle different ranges with appropriate precision
+  if (absValue >= 1e12) {
+    // Trillions
+    const trillions = value / 1e12
+    return `$${trillions >= 10 ? trillions.toFixed(0) : trillions.toFixed(1)}T`
+  } else if (absValue >= 1e9) {
+    // Billions
+    const billions = value / 1e9
+    return `$${billions >= 10 ? billions.toFixed(0) : billions.toFixed(1)}B`
+  } else if (absValue >= 1e6) {
+    // Millions
+    const millions = value / 1e6
+    return `$${millions >= 10 ? millions.toFixed(0) : millions.toFixed(1)}M`
+  } else if (absValue >= 1e3) {
+    // Thousands - handle granular ranges like $105k to $107k
+    const thousands = value / 1e3
+    if (thousands >= 100 && thousands < 1000) {
+      // For ranges like $105k to $107k, show more precision
+      return `$${thousands.toFixed(0)}k`
+    } else {
+      return `$${thousands >= 10 ? thousands.toFixed(0) : thousands.toFixed(1)}k`
+    }
+  } else if (absValue >= 1) {
+    // Units
+    return `$${value >= 10 ? value.toFixed(0) : value.toFixed(1)}`
+  } else if (absValue >= 0.01) {
+    // Cents
+    return `$${value.toFixed(2)}`
+  } else {
+    // Use scientific notation for very small values (e.g., $5e-6, $1e-4)
+    return `$${value.toExponential(0)}`
+  }
+}
+
 export function formatPercentage(value: number | undefined | null): string {
   if (value === undefined || value === null || isNaN(value)) {
     return '0.00%'

@@ -14,8 +14,12 @@ const geistMono = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'CodeGuide Starter Lite',
-  description: 'Starter kit from codeguide.dev',
+  title: 'Bitcoin Calculator & Analytics',
+  description: 'Advanced Bitcoin price analytics, projections, and investment calculator',
+  icons: {
+    icon: '/icon.png',
+    apple: '/icon.png',
+  },
 }
 
 export default function RootLayout({

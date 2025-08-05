@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const liveData = await fetchLiveBTCData()
     
     // Read the current CSV file
-    const csvPath = path.join(process.cwd(), 'public', 'BTC Historical Prices.csv')
+    const csvPath = path.join(process.cwd(), 'public', 'BTC Price History.csv')
     const csvContent = await fs.readFile(csvPath, 'utf-8')
     
     // Parse CSV data

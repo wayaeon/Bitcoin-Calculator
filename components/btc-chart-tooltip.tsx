@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { TrendingUp, TrendingDown, Calendar, DollarSign } from 'lucide-react'
+import { formatPrice, formatPriceChange } from '@/lib/btc-calculator'
 
 interface BTCChartTooltipProps {
   active?: boolean
@@ -12,6 +13,10 @@ interface BTCChartTooltipProps {
   data?: any[]
   convertedData?: any[]
   className?: string
+  showVolume?: boolean
+  showMarketCap?: boolean
+  showPercentageChange?: boolean
+  customStyling?: React.CSSProperties
 }
 
 interface Currency {
@@ -19,6 +24,21 @@ interface Currency {
   name: string
   symbol: string
   rate: number
+}
+
+// Helper function to format market cap with appropriate units
+const formatMarketCap = (marketCap: number, currencySymbol: string): string => {
+  if (marketCap >= 1e12) {
+    return `${currencySymbol}${(marketCap / 1e12).toFixed(2)}T`
+  } else if (marketCap >= 1e9) {
+    return `${currencySymbol}${(marketCap / 1e9).toFixed(2)}B`
+  } else if (marketCap >= 1e6) {
+    return `${currencySymbol}${(marketCap / 1e6).toFixed(2)}M`
+  } else if (marketCap >= 1e3) {
+    return `${currencySymbol}${(marketCap / 1e3).toFixed(2)}K`
+  } else {
+    return `${currencySymbol}${marketCap.toFixed(2)}`
+  }
 }
 
 export const BTCChartTooltip = ({
@@ -43,14 +63,16 @@ export const BTCChartTooltip = ({
   const priceChange = currentPrice - firstPrice
   const percentageChange = firstPrice ? (priceChange / firstPrice) * 100 : 0
 
-  // Find the corresponding data point for the current value to get the correct date
-  const currentDataPoint = convertedData.find(item => Math.abs(item.price - numericValue) < 0.01) || 
-                          data.find(item => Math.abs(item.price - numericValue) < 0.01) || 
+  // Use the label (timestamp) provided by the chart for accurate date
+  const currentDate = new Date(label || Date.now())
+  
+  // Find the corresponding data point for additional info
+  const currentDataPoint = convertedData.find(item => item.timestamp === label) || 
+                          data.find(item => item.timestamp === label) || 
                           convertedData[0] || data[0]
-  const currentDate = new Date(currentDataPoint?.timestamp || Date.now())
 
   return (
-    <div className={`bg-gray-900/95 border border-gray-700 text-white backdrop-blur-sm shadow-xl rounded-lg p-4 ${className}`}>
+    <div className={`bg-gray-900/95 border border-gray-700 text-white backdrop-blur-sm shadow-xl rounded-lg p-4 min-w-64 ${className}`}>
       {/* Header with currency info */}
       <div className="flex justify-between items-center mb-3">
         <div className="flex items-center gap-2">
@@ -62,15 +84,12 @@ export const BTCChartTooltip = ({
         </span>
       </div>
 
-      {/* Main price display */}
-      <div className="mb-4">
-        <div className="text-3xl font-bold text-white mb-1">
-          {selectedCurrencySymbol}{numericValue.toLocaleString(undefined, { 
-            minimumFractionDigits: 0, 
-            maximumFractionDigits: 5 
-          })}
+                           {/* Main price display */}
+        <div className="mb-4">
+          <div className="text-3xl font-bold text-white mb-1">
+            {formatPrice(numericValue, selectedCurrencySymbol)}
+          </div>
         </div>
-      </div>
 
       {/* Price change indicator */}
       <div className="flex items-center gap-2 mb-4">
@@ -81,7 +100,7 @@ export const BTCChartTooltip = ({
         )}
         <div className="flex items-center gap-2">
           <span className={`font-semibold ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}
+            {priceChange >= 0 ? '+' : ''}{formatPriceChange(priceChange)}
           </span>
           <span className={`text-sm ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             ({percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(2)}%)
@@ -105,22 +124,22 @@ export const BTCChartTooltip = ({
       {currentDataPoint && (
         <div className="mt-3 pt-3 border-t border-gray-700">
           <div className="grid grid-cols-2 gap-4 text-xs">
-            {currentDataPoint.volume && (
+            {currentDataPoint.volume !== undefined && (
               <div>
                 <span className="text-gray-400">Volume:</span>
                 <div className="text-white font-medium">
-                  {currentDataPoint.volume.toLocaleString()}
+                  {currentDataPoint.volume === 0 ? 'Unknown' : currentDataPoint.volume.toLocaleString()}
                 </div>
               </div>
             )}
-            {currentDataPoint.marketCap && (
-              <div>
-                <span className="text-gray-400">Market Cap:</span>
-                <div className="text-white font-medium">
-                  {selectedCurrencySymbol}{(currentDataPoint.marketCap / 1e12).toFixed(2)}T
-                </div>
-              </div>
-            )}
+                         {currentDataPoint.marketCap && (
+               <div>
+                 <span className="text-gray-400">Market Cap:</span>
+                 <div className="text-white font-medium">
+                   {formatMarketCap(currentDataPoint.marketCap, selectedCurrencySymbol)}
+                 </div>
+               </div>
+             )}
           </div>
         </div>
       )}
@@ -132,6 +151,7 @@ export const BTCChartTooltip = ({
 export const BTCChartTooltipEnhanced = ({
   active,
   payload,
+  label,
   selectedCurrency = 'USD',
   selectedCurrencySymbol = '$',
   data = [],
@@ -141,12 +161,7 @@ export const BTCChartTooltipEnhanced = ({
   showMarketCap = true,
   showPercentageChange = true,
   customStyling = {}
-}: BTCChartTooltipProps & {
-  showVolume?: boolean
-  showMarketCap?: boolean
-  showPercentageChange?: boolean
-  customStyling?: React.CSSProperties
-}) => {
+}: BTCChartTooltipProps) => {
   if (!active || !payload || payload.length === 0) {
     return null
   }
@@ -160,15 +175,17 @@ export const BTCChartTooltipEnhanced = ({
   const priceChange = currentPrice - firstPrice
   const percentageChange = firstPrice ? (priceChange / firstPrice) * 100 : 0
 
-  // Find the corresponding data point
-  const currentDataPoint = convertedData.find(item => Math.abs(item.price - numericValue) < 0.01) || 
-                          data.find(item => Math.abs(item.price - numericValue) < 0.01) || 
+  // Use the label (timestamp) provided by the chart for accurate date
+  const currentDate = new Date(label || Date.now())
+  
+  // Find the corresponding data point for additional info
+  const currentDataPoint = convertedData.find(item => item.timestamp === label) || 
+                          data.find(item => item.timestamp === label) || 
                           convertedData[0] || data[0]
-  const currentDate = new Date(currentDataPoint?.timestamp || Date.now())
 
   return (
     <div 
-      className={`bg-gray-900/95 border border-gray-700 text-white backdrop-blur-sm shadow-xl rounded-lg p-4 ${className}`}
+      className={`bg-gray-900/95 border border-gray-700 text-white backdrop-blur-sm shadow-xl rounded-lg p-4 min-w-64 ${className}`}
       style={customStyling}
     >
       {/* Header */}
@@ -182,15 +199,12 @@ export const BTCChartTooltipEnhanced = ({
         </span>
       </div>
 
-      {/* Price */}
-      <div className="mb-4">
-        <div className="text-3xl font-bold text-white mb-1">
-          {selectedCurrencySymbol}{numericValue.toLocaleString(undefined, { 
-            minimumFractionDigits: 0, 
-            maximumFractionDigits: 5 
-          })}
+                           {/* Price */}
+        <div className="mb-4">
+          <div className="text-3xl font-bold text-white mb-1">
+            {formatPrice(numericValue, selectedCurrencySymbol)}
+          </div>
         </div>
-      </div>
 
       {/* Price change */}
       {showPercentageChange && (
@@ -202,7 +216,7 @@ export const BTCChartTooltipEnhanced = ({
           )}
           <div className="flex items-center gap-2">
             <span className={`font-semibold ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}
+              {priceChange >= 0 ? '+' : ''}{formatPriceChange(priceChange)}
             </span>
             <span className={`text-sm ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               ({percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(2)}%)
@@ -227,22 +241,22 @@ export const BTCChartTooltipEnhanced = ({
       {currentDataPoint && (showVolume || showMarketCap) && (
         <div className="pt-3 border-t border-gray-700">
           <div className="grid grid-cols-2 gap-4 text-xs">
-            {showVolume && currentDataPoint.volume && (
-              <div>
-                <span className="text-gray-400">Volume:</span>
-                <div className="text-white font-medium">
-                  {currentDataPoint.volume.toLocaleString()}
-                </div>
-              </div>
-            )}
-            {showMarketCap && currentDataPoint.marketCap && (
-              <div>
-                <span className="text-gray-400">Market Cap:</span>
-                <div className="text-white font-medium">
-                  {selectedCurrencySymbol}{(currentDataPoint.marketCap / 1e12).toFixed(2)}T
-                </div>
-              </div>
-            )}
+                         {showVolume && currentDataPoint.volume !== undefined && (
+               <div>
+                 <span className="text-gray-400">Volume:</span>
+                 <div className="text-white font-medium">
+                   {currentDataPoint.volume === 0 ? 'Unknown' : currentDataPoint.volume.toLocaleString()}
+                 </div>
+               </div>
+             )}
+                         {showMarketCap && currentDataPoint.marketCap && (
+               <div>
+                 <span className="text-gray-400">Market Cap:</span>
+                 <div className="text-white font-medium">
+                   {formatMarketCap(currentDataPoint.marketCap, selectedCurrencySymbol)}
+                 </div>
+               </div>
+             )}
           </div>
         </div>
       )}

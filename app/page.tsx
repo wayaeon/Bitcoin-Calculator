@@ -3,5 +3,9 @@
 import { BTCCalculator } from '@/components/btc-calculator'
 
 export default function Home() {
-  return <BTCCalculator />
+  return (
+    <div className="min-h-screen w-full">
+      <BTCCalculator />
+    </div>
+  )
 }

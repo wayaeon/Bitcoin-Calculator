@@ -12,6 +12,170 @@
   .text-balance {
     text-wrap: balance;
   }
+  
+  /* Responsive utilities */
+  .container-responsive {
+    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .chart-container-responsive {
+    @apply h-[calc(100vh-280px)] sm:h-[calc(100vh-320px)] lg:h-[calc(100vh-360px)];
+  }
+  
+  .header-responsive {
+    @apply h-16 sm:h-20 lg:h-24;
+  }
+  
+  .button-responsive {
+    @apply h-9 sm:h-10 text-xs sm:text-sm;
+  }
+  
+  .text-responsive {
+    @apply text-xs sm:text-sm lg:text-base;
+  }
+  
+  .heading-responsive {
+    @apply text-lg sm:text-xl lg:text-2xl;
+  }
+  
+  .spacing-responsive {
+    @apply gap-2 sm:gap-3 lg:gap-4;
+  }
+  
+  .padding-responsive {
+    @apply p-2 sm:p-3 lg:p-4;
+  }
+  
+  /* Layout utilities */
+  .flex-center {
+    @apply flex items-center justify-center;
+  }
+  
+  .flex-between {
+    @apply flex items-center justify-between;
+  }
+  
+  .flex-start {
+    @apply flex items-center justify-start;
+  }
+  
+  .flex-end {
+    @apply flex items-center justify-end;
+  }
+  
+  /* Grid utilities */
+  .grid-responsive {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+  
+  .grid-stats {
+    @apply grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4;
+  }
+  
+  /* Spacing utilities */
+  .space-y-responsive {
+    @apply space-y-2 sm:space-y-3 lg:space-y-4;
+  }
+  
+  .space-x-responsive {
+    @apply space-x-2 sm:space-x-3 lg:space-x-4;
+  }
+  
+  /* Text sizing utilities */
+  .text-xs-sm {
+    @apply text-xs sm:text-sm;
+  }
+  
+  .text-sm-lg {
+    @apply text-sm sm:text-lg;
+  }
+  
+  .text-lg-xl {
+    @apply text-lg sm:text-xl;
+  }
+  
+  .text-xl-2xl {
+    @apply text-xl sm:text-2xl;
+  }
+  
+  /* Component sizing utilities */
+  .h-responsive {
+    @apply h-9 sm:h-10 lg:h-11;
+  }
+  
+  .w-responsive {
+    @apply w-28 sm:w-32 lg:w-36;
+  }
+  
+  .min-h-responsive {
+    @apply min-h-[calc(100vh-80px)] sm:min-h-[calc(100vh-100px)];
+  }
+  
+  /* Layout management utilities */
+  .flex-col-responsive {
+    @apply flex flex-col;
+  }
+  
+  .flex-1-responsive {
+    @apply flex-1 min-h-0;
+  }
+  
+  .flex-shrink-0-responsive {
+    @apply flex-shrink-0;
+  }
+  
+  /* Chart height utilities */
+  .chart-height-mobile {
+    @apply h-[calc(100vh-400px)];
+  }
+  
+  .chart-height-tablet {
+    @apply sm:h-[calc(100vh-450px)];
+  }
+  
+  .chart-height-desktop {
+    @apply lg:h-[calc(100vh-500px)];
+  }
+  
+  /* Container height utilities */
+  .container-height-mobile {
+    @apply h-[calc(100vh-80px)];
+  }
+  
+  .container-height-tablet {
+    @apply sm:h-[calc(100vh-100px)];
+  }
+  
+  /* Overflow utilities */
+  .overflow-visible-responsive {
+    @apply overflow-visible;
+  }
+  
+  .overflow-hidden-responsive {
+    @apply overflow-hidden;
+  }
+  
+  /* Visibility utilities */
+  .visible-responsive {
+    @apply block;
+  }
+  
+  .hidden-responsive {
+    @apply hidden;
+  }
+  
+  /* Z-index utilities for proper layering */
+  .z-chart {
+    @apply z-10;
+  }
+  
+  .z-controls {
+    @apply z-20;
+  }
+  
+  .z-floating {
+    @apply z-50;
+  }
 }
 
 @layer base {
@@ -92,5 +256,25 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Ensure proper viewport handling on mobile */
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
+  }
+  
+  /* Improve touch targets on mobile */
+  @media (max-width: 640px) {
+    button, [role="button"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+    
+    input, select, textarea {
+      font-size: 16px; /* Prevent zoom on iOS */
+    }
+  }
+  
+  /* Smooth scrolling for better mobile experience */
+  html {
+    scroll-behavior: smooth;
   }
 }

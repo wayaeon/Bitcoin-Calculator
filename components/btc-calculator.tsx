@@ -93,64 +93,77 @@ export function BTCCalculator() {
         </div>
       </div>
       
-      {/* Redesigned Header Section */}
+      {/* Redesigned Header Section - More Responsive */}
       <div className="relative z-10 bg-gray-900/95 backdrop-blur-sm border-b border-gray-800/50 shadow-lg">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
+        <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
             {/* Left Side - Logo and Title */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Bitcoin className="h-6 w-6 text-white" />
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Bitcoin className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white tracking-tight">
-                    Bitcoin Analytics
+                  <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                    The Bitcoin Calculator
                   </h1>
-                  <p className="text-xs text-gray-400 font-medium">
-                    Price History & Projections
+                  <p className="text-xs text-gray-400 font-medium hidden sm:block">
+                    Missed Opportunity and Future Value
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Center - Live Price Display */}
-            <div className="hidden lg:flex items-center gap-6">
+            {/* Center - Live Price Display - Responsive */}
+            <div className="hidden md:flex items-center gap-4 lg:gap-6">
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">Current BTC Price</div>
-                <div className="text-lg font-bold text-green-400">
+                <div className="text-sm lg:text-lg font-bold text-green-400">
                   $117,877.42
                 </div>
               </div>
-              <div className="w-px h-8 bg-gray-700"></div>
+              <div className="w-px h-6 lg:h-8 bg-gray-700"></div>
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">24h Change</div>
-                <div className="text-sm font-semibold text-green-400">
+                <div className="text-xs lg:text-sm font-semibold text-green-400">
                   +2.34%
                 </div>
               </div>
-              <div className="w-px h-8 bg-gray-700"></div>
+              <div className="w-px h-6 lg:h-8 bg-gray-700"></div>
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">Market Cap</div>
-                <div className="text-sm font-semibold text-white">
+                <div className="text-xs lg:text-sm font-semibold text-white">
                   $2.3T
                 </div>
               </div>
             </div>
 
+            {/* Mobile Price Display */}
+            <div className="md:hidden flex items-center gap-3">
+              <div className="text-center">
+                <div className="text-xs text-gray-400">BTC Price</div>
+                <div className="text-sm font-bold text-green-400">$117,877</div>
+              </div>
+              <div className="w-px h-8 bg-gray-700"></div>
+              <div className="text-center">
+                <div className="text-xs text-gray-400">24h</div>
+                <div className="text-sm font-semibold text-green-400">+2.34%</div>
+              </div>
+            </div>
+
             {/* Right Side - Actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-9 px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
+                className="h-8 w-8 sm:h-9 sm:px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
               >
                 <Share2 className="h-4 w-4" />
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-9 px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
+                className="h-8 w-8 sm:h-9 sm:px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
               >
                 <Settings className="h-4 w-4" />
               </Button>
@@ -158,7 +171,7 @@ export function BTCCalculator() {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-9 px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
+                className="h-8 w-8 sm:h-9 sm:px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
               >
                 <Menu className="h-4 w-4" />
               </Button>
@@ -167,9 +180,10 @@ export function BTCCalculator() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-2 relative z-10 h-screen flex items-center justify-center">
+      {/* Main Content Area - Responsive */}
+      <div className="container mx-auto px-4 py-2 relative z-10 h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] flex items-center justify-center">
         {/* Full Window Price History */}
-        <div className="w-full max-w-7xl">
+        <div className="w-full max-w-7xl h-full flex flex-col">
           <BTCPriceHistory 
             onDataUpdate={(data, currency, currencySymbol) => {
               setPriceHistoryData(data)
@@ -179,16 +193,16 @@ export function BTCCalculator() {
           />
         </div>
 
-        {/* Single Expandable Calculator Widget */}
-        <div className="fixed bottom-6 right-6 z-50">
+        {/* Single Expandable Calculator Widget - Responsive Positioning */}
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
           <div className="relative">
             {/* Main Calculator Button */}
             <button
               onClick={() => setIsCalculatorExpanded(!isCalculatorExpanded)}
-              className="w-16 h-16 bg-gradient-to-br from-orange-600/90 via-orange-500/90 to-amber-600/90 hover:from-orange-700/90 hover:via-orange-600/90 hover:to-amber-700/90 rounded-2xl shadow-2xl hover:shadow-orange-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white text-2xl backdrop-blur-sm border border-orange-400/20"
+              className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-orange-600/90 via-orange-500/90 to-amber-600/90 hover:from-orange-700/90 hover:via-orange-600/90 hover:to-amber-700/90 rounded-2xl shadow-2xl hover:shadow-orange-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white text-xl sm:text-2xl backdrop-blur-sm border border-orange-400/20"
               title="Calculators - Future Value & Regret Calculators"
             >
-              <Calculator className="h-8 w-8" />
+              <Calculator className="h-6 w-6 sm:h-8 sm:w-8" />
             </button>
             
             {/* Expandable Calculator Options */}
@@ -200,10 +214,10 @@ export function BTCCalculator() {
                     setIsFutureValueOpen(true)
                     setIsCalculatorExpanded(false)
                   }}
-                  className="w-14 h-14 bg-gradient-to-br from-blue-600/90 via-blue-500/90 to-cyan-600/90 hover:from-blue-700/90 hover:via-blue-600/90 hover:to-cyan-700/90 rounded-xl shadow-xl hover:shadow-blue-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white text-xl backdrop-blur-sm border border-blue-400/20"
+                  className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-600/90 via-blue-500/90 to-cyan-600/90 hover:from-blue-700/90 hover:via-blue-600/90 hover:to-cyan-700/90 rounded-xl shadow-xl hover:shadow-blue-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white backdrop-blur-sm border border-blue-400/20"
                   title="Future Value Calculator"
                 >
-                  📈
+                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
                 
                 {/* Regret Calculator Button */}
@@ -212,20 +226,20 @@ export function BTCCalculator() {
                     setIsRegretOpen(true)
                     setIsCalculatorExpanded(false)
                   }}
-                  className="w-14 h-14 bg-gradient-to-br from-red-600/90 via-red-500/90 to-pink-600/90 hover:from-red-700/90 hover:via-red-600/90 hover:to-pink-700/90 rounded-xl shadow-xl hover:shadow-red-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white text-xl backdrop-blur-sm border border-red-400/20"
+                  className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-red-600/90 via-red-500/90 to-pink-600/90 hover:from-red-700/90 hover:via-red-600/90 hover:to-pink-700/90 rounded-xl shadow-xl hover:shadow-red-500/25 hover:scale-105 transition-all duration-300 flex items-center justify-center text-white backdrop-blur-sm border border-red-400/20"
                   title="Regret Calculator"
                 >
-                  😭
+                  <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
               </div>
             )}
             
             {/* Expand/Collapse Icon */}
-            <div className="absolute -top-1 -right-1 w-6 h-6 bg-gray-800/90 rounded-full flex items-center justify-center border border-gray-600/50">
+            <div className="absolute -top-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-gray-800/90 rounded-full flex items-center justify-center border border-gray-600/50">
               {isCalculatorExpanded ? (
-                <ChevronDown className="h-3 w-3 text-gray-300" />
+                <ChevronDown className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-gray-300" />
               ) : (
-                <ChevronUp className="h-3 w-3 text-gray-300" />
+                <ChevronUp className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-gray-300" />
               )}
             </div>
           </div>

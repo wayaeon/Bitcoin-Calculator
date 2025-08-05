@@ -20,7 +20,7 @@ import {
   ChartLegend,
   ChartLegendContent,
 } from '@/components/ui/chart'
-import { CalculatorOutputs, CalculatorInputs, formatCurrency, formatBTC, formatPercentage } from '@/lib/btc-calculator'
+import { CalculatorOutputs, CalculatorInputs, formatCurrency, formatBTC, formatPercentage, formatYAxisValue } from '@/lib/btc-calculator'
 import { Coins, Globe, TrendingUp, DollarSign, BarChart3 } from 'lucide-react'
 
 interface BTCChartProps {
@@ -170,7 +170,7 @@ export const BTCChart = React.memo(function BTCChart({ outputs, inputs }: BTCCha
                   label={{ value: 'Year', position: 'insideBottom', offset: -10, fill: '#9CA3AF', fontSize: 12 }}
                 />
                 <YAxis 
-                  tickFormatter={(value) => formatCurrency(value)}
+                  tickFormatter={formatYAxisValue}
                   stroke="#9CA3AF"
                   fontSize={11}
                   tickLine={false}
@@ -230,7 +230,7 @@ export const BTCChart = React.memo(function BTCChart({ outputs, inputs }: BTCCha
                   label={{ value: 'Year', position: 'insideBottom', offset: -10, fill: '#9CA3AF', fontSize: 12 }}
                 />
                 <YAxis 
-                  tickFormatter={(value) => formatCurrency(value)}
+                  tickFormatter={formatYAxisValue}
                   stroke="#9CA3AF"
                   fontSize={11}
                   tickLine={false}
