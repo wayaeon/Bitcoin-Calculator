@@ -300,14 +300,53 @@ export function formatPriceChange(value: number): string {
     })
   } else {
     // Small values - show up to first 2 non-zero digits
-    const valueStr = value.toString()
-    const decimalIndex = valueStr.indexOf('.')
+    // Use Number.parseFloat to force decimal notation
+    const sign = value < 0 ? '-' : ''
+    const absValueStr = Math.abs(value).toString()
+    
+    // If the value is in scientific notation, convert it manually
+    if (absValueStr.includes('e')) {
+      const [coefficient, exponent] = absValueStr.split('e')
+      const exp = parseInt(exponent)
+      const coef = parseFloat(coefficient)
+      
+      if (exp < 0) {
+        // Very small number, show as decimal
+        const decimalPlaces = Math.abs(exp)
+        const decimalValue = coef / Math.pow(10, decimalPlaces)
+        const fixedValue = decimalValue.toFixed(20)
+        
+        // Find first 2 non-zero digits
+        const decimalIndex = fixedValue.indexOf('.')
+        if (decimalIndex === -1) {
+          return `${sign}${decimalValue.toFixed(0)}`
+        }
+        
+        const decimalPart = fixedValue.substring(decimalIndex + 1)
+        let significantDigits = 0
+        let result = ''
+        
+        for (let i = 0; i < decimalPart.length && significantDigits < 2; i++) {
+          if (decimalPart[i] !== '0') {
+            significantDigits++
+          }
+          result += decimalPart[i]
+        }
+        
+        const integerPart = fixedValue.substring(0, decimalIndex)
+        return `${sign}${integerPart}.${result}`
+      }
+    }
+    
+    // Regular decimal handling
+    const fixedValue = Math.abs(value).toFixed(20)
+    const decimalIndex = fixedValue.indexOf('.')
     
     if (decimalIndex === -1) {
       return value.toFixed(0)
     }
     
-    const decimalPart = valueStr.substring(decimalIndex + 1)
+    const decimalPart = fixedValue.substring(decimalIndex + 1)
     let significantDigits = 0
     let result = ''
     
@@ -318,8 +357,8 @@ export function formatPriceChange(value: number): string {
       result += decimalPart[i]
     }
     
-    const integerPart = valueStr.substring(0, decimalIndex)
-    return `${integerPart}.${result}`
+    const integerPart = fixedValue.substring(0, decimalIndex)
+    return `${sign}${integerPart}.${result}`
   }
 }
 
@@ -339,14 +378,53 @@ export function formatPrice(value: number, currencySymbol: string = '$'): string
     })}`
   } else {
     // Small values - show up to first 2 non-zero digits
-    const valueStr = value.toString()
-    const decimalIndex = valueStr.indexOf('.')
+    // Use Number.parseFloat to force decimal notation
+    const sign = value < 0 ? '-' : ''
+    const absValueStr = Math.abs(value).toString()
+    
+    // If the value is in scientific notation, convert it manually
+    if (absValueStr.includes('e')) {
+      const [coefficient, exponent] = absValueStr.split('e')
+      const exp = parseInt(exponent)
+      const coef = parseFloat(coefficient)
+      
+      if (exp < 0) {
+        // Very small number, show as decimal
+        const decimalPlaces = Math.abs(exp)
+        const decimalValue = coef / Math.pow(10, decimalPlaces)
+        const fixedValue = decimalValue.toFixed(20)
+        
+        // Find first 2 non-zero digits
+        const decimalIndex = fixedValue.indexOf('.')
+        if (decimalIndex === -1) {
+          return `${currencySymbol}${sign}${decimalValue.toFixed(0)}`
+        }
+        
+        const decimalPart = fixedValue.substring(decimalIndex + 1)
+        let significantDigits = 0
+        let result = ''
+        
+        for (let i = 0; i < decimalPart.length && significantDigits < 2; i++) {
+          if (decimalPart[i] !== '0') {
+            significantDigits++
+          }
+          result += decimalPart[i]
+        }
+        
+        const integerPart = fixedValue.substring(0, decimalIndex)
+        return `${currencySymbol}${sign}${integerPart}.${result}`
+      }
+    }
+    
+    // Regular decimal handling
+    const fixedValue = Math.abs(value).toFixed(20)
+    const decimalIndex = fixedValue.indexOf('.')
     
     if (decimalIndex === -1) {
       return `${currencySymbol}${value.toFixed(0)}`
     }
     
-    const decimalPart = valueStr.substring(decimalIndex + 1)
+    const decimalPart = fixedValue.substring(decimalIndex + 1)
     let significantDigits = 0
     let result = ''
     
@@ -357,8 +435,8 @@ export function formatPrice(value: number, currencySymbol: string = '$'): string
       result += decimalPart[i]
     }
     
-    const integerPart = valueStr.substring(0, decimalIndex)
-    return `${currencySymbol}${integerPart}.${result}`
+    const integerPart = fixedValue.substring(0, decimalIndex)
+    return `${currencySymbol}${sign}${integerPart}.${result}`
   }
 }
 
@@ -399,8 +477,27 @@ export function formatYAxisValue(value: number): string {
     // Cents
     return `$${value.toFixed(2)}`
   } else {
-    // Use scientific notation for very small values (e.g., $5e-6, $1e-4)
-    return `$${value.toExponential(0)}`
+    // Small values - show up to first 2 non-zero digits (same as formatPrice)
+    const valueStr = value.toString()
+    const decimalIndex = valueStr.indexOf('.')
+    
+    if (decimalIndex === -1) {
+      return `$${value.toFixed(0)}`
+    }
+    
+    const decimalPart = valueStr.substring(decimalIndex + 1)
+    let significantDigits = 0
+    let result = ''
+    
+    for (let i = 0; i < decimalPart.length && significantDigits < 2; i++) {
+      if (decimalPart[i] !== '0') {
+        significantDigits++
+      }
+      result += decimalPart[i]
+    }
+    
+    const integerPart = valueStr.substring(0, decimalIndex)
+    return `$${integerPart}.${result}`
   }
 }
 

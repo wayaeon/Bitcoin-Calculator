@@ -36,27 +36,29 @@ import {
   formatPercentage,
   getCurrentBTCPrice
 } from '@/lib/btc-calculator'
+import { useBTCPrice } from '@/hooks/use-btc-price'
 import { BTCChart } from './btc-chart'
 import { BTCOutputCards } from './btc-output-cards'
 import { BTCPriceHistory } from './btc-price-history'
 import { FutureValueCalculator } from './future-value-calculator'
 import { RegretCalculator } from './regret-calculator'
-// import Galaxy from './Galaxy'
 
 export function BTCCalculator() {
   const [inputs, setInputs] = useState<CalculatorInputs>({
     investmentType: 'one-time',
-    investmentAmount: 10000,
+    investmentAmount: 1000,
     dcaFrequency: 'monthly',
-    dcaAmount: 1000,
+    dcaAmount: 10,
     startYear: 2024,
-    endYear: 2050,
+    endYear: 2040,
     globalWealthCAGR: 4,
     btcCAGR: 15
   })
   const [outputs, setOutputs] = useState<CalculatorOutputs | null>(null)
-  const [currentBTCPrice, setCurrentBTCPrice] = useState<number>(BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE)
   const [isLoading, setIsLoading] = useState(false)
+  
+  // Real-time BTC price hook
+  const { priceData, isLoading: priceLoading, error: priceError } = useBTCPrice()
   
   // Calculator popup states
   const [isFutureValueOpen, setIsFutureValueOpen] = useState(false)
@@ -71,8 +73,7 @@ export function BTCCalculator() {
   const handleCalculate = async () => {
     try {
       setIsLoading(true)
-      const currentPrice = await getCurrentBTCPrice()
-      setCurrentBTCPrice(currentPrice)
+      const currentPrice = priceData?.price || BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE
       const result = calculateBTCFutureValue(inputs)
       setOutputs(result)
     } catch (error) {
@@ -119,21 +120,47 @@ export function BTCCalculator() {
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">Current BTC Price</div>
                 <div className="text-sm lg:text-lg font-bold text-green-400">
-                  $117,877.42
+                  {priceLoading ? (
+                    <div className="animate-pulse">Loading...</div>
+                  ) : priceError ? (
+                    <div className="text-red-400">Error</div>
+                  ) : priceData ? (
+                    `$${priceData.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  ) : (
+                    `$${BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE.toLocaleString()}`
+                  )}
                 </div>
               </div>
               <div className="w-px h-6 lg:h-8 bg-gray-700"></div>
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">24h Change</div>
-                <div className="text-xs lg:text-sm font-semibold text-green-400">
-                  +2.34%
+                <div className={`text-xs lg:text-sm font-semibold ${
+                  (priceData?.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {priceLoading ? (
+                    <div className="animate-pulse">...</div>
+                  ) : priceError ? (
+                    <div className="text-red-400">Error</div>
+                  ) : priceData ? (
+                    `${(priceData.price_change_percentage_24h ?? 0) >= 0 ? '+' : ''}${(priceData.price_change_percentage_24h ?? 0).toFixed(2)}%`
+                  ) : (
+                    '+2.34%'
+                  )}
                 </div>
               </div>
               <div className="w-px h-6 lg:h-8 bg-gray-700"></div>
               <div className="text-center">
                 <div className="text-xs text-gray-400 mb-1">Market Cap</div>
                 <div className="text-xs lg:text-sm font-semibold text-white">
-                  $2.3T
+                  {priceLoading ? (
+                    <div className="animate-pulse">...</div>
+                  ) : priceError ? (
+                    <div className="text-red-400">Error</div>
+                  ) : priceData ? (
+                    `$${(priceData.market_cap / 1e12).toFixed(1)}T`
+                  ) : (
+                    '$2.3T'
+                  )}
                 </div>
               </div>
             </div>
@@ -142,12 +169,34 @@ export function BTCCalculator() {
             <div className="md:hidden flex items-center gap-3">
               <div className="text-center">
                 <div className="text-xs text-gray-400">BTC Price</div>
-                <div className="text-sm font-bold text-green-400">$117,877</div>
+                <div className="text-sm font-bold text-green-400">
+                  {priceLoading ? (
+                    <div className="animate-pulse">Loading...</div>
+                  ) : priceError ? (
+                    <div className="text-red-400">Error</div>
+                  ) : priceData ? (
+                    `$${priceData.price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                  ) : (
+                    `$${BTC_CALCULATOR_CONSTANTS.CURRENT_BTC_PRICE.toLocaleString()}`
+                  )}
+                </div>
               </div>
               <div className="w-px h-8 bg-gray-700"></div>
               <div className="text-center">
                 <div className="text-xs text-gray-400">24h</div>
-                <div className="text-sm font-semibold text-green-400">+2.34%</div>
+                <div className={`text-sm font-semibold ${
+                  (priceData?.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {priceLoading ? (
+                    <div className="animate-pulse">...</div>
+                  ) : priceError ? (
+                    <div className="text-red-400">Error</div>
+                  ) : priceData ? (
+                    `${(priceData.price_change_percentage_24h ?? 0) >= 0 ? '+' : ''}${(priceData.price_change_percentage_24h ?? 0).toFixed(2)}%`
+                  ) : (
+                    '+2.34%'
+                  )}
+                </div>
               </div>
             </div>
 

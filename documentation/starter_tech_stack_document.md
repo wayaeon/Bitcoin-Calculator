@@ -11,7 +11,7 @@ This starter kit uses the following tech stack:
    - **Clerk**: Implemented via `@clerk/nextjs` for handling authentication and user management
 
 3. **Database and Backend:**
-   - **Supabase**: Used as the main database and backend service
+   - **Local CSV Files**: Used for BTC price data storage
    - Database schema includes tables for:
      - customers
      - products

@@ -4,6 +4,8 @@ interface LiveBTCData {
   price: number
   volume_24h: number
   market_cap: number
+  price_change_24h: number
+  price_change_percentage_24h: number
   last_updated: string
 }
 
@@ -18,33 +20,97 @@ interface CSVRow {
   'Market Cap': number
 }
 
-// Fetch live BTC data from CoinGecko API
+// Cache for API responses to reduce calls
+let apiCache: {
+  data: LiveBTCData | null
+  timestamp: number
+} = { data: null, timestamp: 0 }
+
+// Cache duration in milliseconds (5 minutes)
+const CACHE_DURATION = 5 * 60 * 1000
+
+// Fetch live BTC data from CoinGecko API with caching
 export async function fetchLiveBTCData(): Promise<LiveBTCData> {
   try {
-    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_vol=true&include_market_cap=true&include_last_updated_at=true', {
+    // Check if we have cached data that's still valid
+    const now = Date.now()
+    if (apiCache.data && (now - apiCache.timestamp) < CACHE_DURATION) {
+      console.log('Using cached BTC data')
+      return apiCache.data
+    }
+
+    // Check if we're making too many calls (limit to once per 5 minutes)
+    const timeSinceLastCall = now - apiCache.timestamp
+    if (timeSinceLastCall < CACHE_DURATION) {
+      console.log('Rate limiting: Using cached data to avoid API limits')
+      if (apiCache.data) {
+        return apiCache.data
+      }
+    }
+
+    console.log('Fetching fresh BTC data from CoinGecko...')
+    
+    // Get API key from environment variable
+    const apiKey = process.env.COINGECKO_API_KEY || 'CG-kWAbG4Uj8mRoUxBDjXWSMVYz'
+    
+    // Use the detailed endpoint for better data
+    const response = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false', {
       headers: {
-        'x-cg-demo-api-key': 'CG-kWAbG4Uj8mRoUxBDjXWSMVYz'
+        'x-cg-demo-api-key': apiKey
       }
     })
 
     if (!response.ok) {
+      // If API fails, return cached data if available
+      if (apiCache.data) {
+        console.warn('API failed, using cached data')
+        return apiCache.data
+      }
       throw new Error(`API request failed: ${response.status}`)
     }
 
     const data = await response.json()
     
-    if (!data.bitcoin) {
-      throw new Error('No Bitcoin data received from API')
+    if (!data.market_data) {
+      // If no data received, return cached data if available
+      if (apiCache.data) {
+        console.warn('No Bitcoin market data received, using cached data')
+        return apiCache.data
+      }
+      throw new Error('No Bitcoin market data received from API')
     }
 
-    return {
-      price: data.bitcoin.usd,
-      volume_24h: data.bitcoin.usd_24h_vol || 0,
-      market_cap: data.bitcoin.usd_market_cap || 0,
+    // Debug: Log the actual API response structure
+    console.log('CoinGecko API response market_data:', JSON.stringify(data.market_data, null, 2))
+
+    const liveData: LiveBTCData = {
+      price: data.market_data.current_price.usd,
+      volume_24h: data.market_data.total_volume.usd || 0,
+      market_cap: data.market_data.market_cap.usd || 0,
+      price_change_24h: data.market_data.price_change_24h || 0,
+      price_change_percentage_24h: data.market_data.price_change_percentage_24h || 0,
       last_updated: new Date().toISOString()
     }
+
+    console.log('Processed live data:', liveData)
+
+    // Update cache
+    apiCache = {
+      data: liveData,
+      timestamp: now
+    }
+
+    console.log('Successfully fetched and cached BTC data')
+    return liveData
   } catch (error) {
     console.error('Error fetching live BTC data:', error)
+    
+    // Return cached data if available, otherwise throw
+    if (apiCache.data) {
+      console.warn('Using cached data due to API error')
+      return apiCache.data
+    }
+    
     throw error
   }
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -18,6 +18,7 @@ import { AreaChart, Area } from 'recharts'
 import { convertCurrency, getSupportedCurrencies } from '@/lib/currency-api'
 import { formatYAxisValue, formatPrice } from '@/lib/btc-calculator'
 import { BTCChartTooltipEnhanced } from '@/components/btc-chart-tooltip'
+import { useBTCPrice } from '@/hooks/use-btc-price'
 
 interface BTCPriceData {
   timestamp: number
@@ -34,7 +35,7 @@ interface BTCPriceHistoryProps {
 export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, onDataUpdate }: BTCPriceHistoryProps) {
   const [data, setData] = useState<BTCPriceData[]>([])
   const [fullData, setFullData] = useState<BTCPriceData[]>([]) // Store full dataset for calculators
-  const [timeRange, setTimeRange] = useState<'1D' | '7D' | '30D' | '90D' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
+  const [timeRange, setTimeRange] = useState<'1D' | '7D' | '30D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
   const [selectedCurrency, setSelectedCurrency] = useState('USD')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,13 +49,23 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   const [chartTheme, setChartTheme] = useState<'default' | 'dark' | 'light'>('default')
   const [lastUpdateTime, setLastUpdateTime] = useState<string>('')
   
+  // Refs to prevent infinite loops
+  const lastUpdateRef = useRef<number>(0)
+  const isUpdatingRef = useRef<boolean>(false)
+  
+  // Real-time BTC price hook
+  const { priceData: realTimePriceData } = useBTCPrice()
+  
   // X-axis zoom functionality
   const [left, setLeft] = useState<number>(0)
   const [right, setRight] = useState<number>(0)
   const [refAreaLeft, setRefAreaLeft] = useState<number | null>(null)
   const [refAreaRight, setRefAreaRight] = useState<number | null>(null)
+  const [isSelectingRange, setIsSelectingRange] = useState(false)
+  const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null)
+  const [isHovering, setIsHovering] = useState(false)
   const [isZoomed, setIsZoomed] = useState(false)
-  const [lastPresetRange, setLastPresetRange] = useState<'1D' | '7D' | '30D' | '90D' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
+  const [lastPresetRange, setLastPresetRange] = useState<'1D' | '7D' | '30D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
 
   const currencies = useMemo(() => [
     { code: 'USD', symbol: '$', name: 'US Dollar' },
@@ -78,6 +89,11 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     { code: 'DKK', symbol: 'kr', name: 'Danish Krone' },
     { code: 'PLN', symbol: 'zł', name: 'Polish Złoty' }
   ], [])
+
+  // Memoized currency info to avoid recalculations
+  const selectedCurrencyInfo = useMemo(() => 
+    currencies.find(c => c.code === selectedCurrency), [currencies, selectedCurrency]
+  )
 
   // Fetch exchange rates from stored file
   const fetchExchangeRates = useCallback(async () => {
@@ -147,81 +163,126 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     }))
   }, [exchangeRates])
 
-  // Load CSV data
-  const loadCSVData = useCallback(async (): Promise<BTCPriceData[]> => {
+  // Load data from API instead of CSV
+  const loadDataFromAPI = useCallback(async (range: string): Promise<BTCPriceData[]> => {
     try {
-      const response = await fetch('/BTC Price History.csv')
+      console.log(`📊 Loading data from API for range: ${range}`)
+      const response = await fetch(`/api/btc-chart-data?timeRange=${range}`)
+      
       if (!response.ok) {
-        throw new Error('Failed to load CSV data')
+        throw new Error(`Failed to load data from API: ${response.status}`)
       }
       
-      const csvText = await response.text()
-      const lines = csvText.split('\n')
-      const headers = lines[0].split(',')
+      const result = await response.json()
       
-      const csvData = lines.slice(1).map(line => {
-        const values = line.split(',')
-        
-        // Handle inconsistent CSV format - some rows have extra columns
-        const startDate = values[0]?.trim()
-        const endDate = values[1]?.trim()
-        const open = parseFloat(values[2]) || 0
-        const high = parseFloat(values[3]) || 0
-        const low = parseFloat(values[4]) || 0
-        const close = parseFloat(values[5]) || 0
-        const volume = parseFloat(values[6]) || 0
-        const marketCap = parseFloat(values[7]) || 0
-        
-        // Debug logging for problematic dates
-        if (startDate && startDate.includes('2009') || startDate?.includes('2010')) {
-          console.log(`Processing row: ${startDate} -> ${endDate}, Close: ${close}`)
-        }
-        
-        return {
-          Start: startDate,
-          End: endDate,
-          Open: open,
-          High: high,
-          Low: low,
-          Close: close,
-          Volume: volume,
-          'Market Cap': marketCap
-        }
-      }).filter(row => row.Close > 0 && row.Start)
+      if (!result.success) {
+        throw new Error(result.error || 'API returned error')
+      }
       
-      // Convert to BTCPriceData (CSV is already in reverse chronological order - newest first)
-      const priceData = csvData.map(row => {
-        // Validate date format
-        const dateStr = row.Start
-        if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          console.error(`Invalid date format: ${dateStr}`)
-          return null
-        }
-        
-        const timestamp = new Date(dateStr).getTime()
-        
-        // Validate timestamp
-        if (isNaN(timestamp)) {
-          console.error(`Invalid timestamp for date: ${dateStr}`)
-          return null
-        }
-        
-        console.log(`Parsing date: ${dateStr} -> ${new Date(timestamp).toISOString()}`)
-        
-        return {
-          timestamp,
-        price: row.Close,
-        volume: row.Volume,
-        marketCap: row['Market Cap']
-        }
-      }).filter(Boolean) // CSV is now in chronological order (oldest first)
+      console.log(`✅ API returned ${result.data.length} data points for ${range}`)
+      
+      // Convert API data to BTCPriceData format
+      const priceData = result.data.map((item: any) => ({
+        timestamp: item.timestamp,
+        price: item.price,
+        volume: item.volume,
+        marketCap: item.marketCap
+      }))
       
       return priceData
     } catch (error) {
-      console.error('Error loading CSV data:', error)
+      console.error('Error loading data from API:', error)
       throw error
     }
   }, [])
+
+
+
+
+
+  // Single data loading effect - only runs when timeRange changes
+  useEffect(() => {
+    const loadDataForRange = async () => {
+      setIsLoading(true)
+      setError(null)
+      
+      try {
+        console.log(`🔄 Loading data for time range: ${timeRange}`)
+        const apiData = await loadDataFromAPI(timeRange)
+        
+        if (apiData.length === 0) {
+          throw new Error(`No data available for ${timeRange} range`)
+        }
+        
+        console.log(`✅ Loaded ${apiData.length} data points for ${timeRange}`)
+        console.log(`📅 Data range: ${new Date(apiData[0]?.timestamp).toISOString()} to ${new Date(apiData[apiData.length - 1]?.timestamp).toISOString()}`)
+        
+        // Store data for current view
+        setData(apiData)
+        
+        // For ALL time range, also load full dataset for calculators
+        if (timeRange === 'ALL') {
+          setFullData(apiData)
+        } else {
+          // Load full dataset separately for calculators
+          try {
+            const fullData = await loadDataFromAPI('ALL')
+            setFullData(fullData)
+          } catch (error) {
+            console.warn('Failed to load full dataset for calculators:', error)
+          }
+        }
+        
+      } catch (error) {
+        console.error('Error loading data:', error)
+        setError(error instanceof Error ? error.message : 'Failed to load data')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    loadDataForRange()
+  }, [timeRange]) // ONLY depend on timeRange
+
+  // Live updates - only check every 5 minutes, don't trigger on data changes
+  useEffect(() => {
+    const checkUpdates = async () => {
+      try {
+        // Check if we have recent data (within last 5 minutes)
+        if (data.length > 0) {
+          const latestTimestamp = data[data.length - 1].timestamp
+          const fiveMinutesAgo = Date.now() - (5 * 60 * 1000)
+          
+          if (latestTimestamp > fiveMinutesAgo) {
+            setUpdateStatus('Data is current')
+            setLastUpdateTime(new Date().toLocaleTimeString())
+            setTimeout(() => setUpdateStatus(''), 3000)
+            return
+          }
+        }
+        
+        setUpdateStatus('Checking for updates...')
+        
+        // Reload current time range data
+        const apiData = await loadDataFromAPI(timeRange)
+        setData(apiData)
+        
+        setLastLiveUpdate(new Date())
+        setUpdateStatus('Data updated successfully')
+        setLastUpdateTime(new Date().toLocaleTimeString())
+        setTimeout(() => setUpdateStatus(''), 3000)
+        
+      } catch (error) {
+        console.error('Error checking for updates:', error)
+        setUpdateStatus('Update failed')
+        setTimeout(() => setUpdateStatus(''), 3000)
+      }
+    }
+    
+    // Only run initial check, don't depend on changing values
+    const interval = setInterval(checkUpdates, 5 * 60 * 1000) // Check every 5 minutes
+    return () => clearInterval(interval)
+  }, []) // Empty dependency array - only runs once on mount
 
   const filterDataByTimeRange = useCallback((allData: BTCPriceData[], range: string): BTCPriceData[] => {
     if (allData.length === 0) return []
@@ -266,181 +327,6 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     console.log(`Filtering for ${range}: ${allData.length} total records, ${filteredData.length} after filtering, startTime: ${new Date(startTime).toISOString()}, latest: ${new Date(latestTimestamp).toISOString()}`)
     return filteredData
   }, [])
-
-  const loadData = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    
-    try {
-      const allData = await loadCSVData()
-      console.log(`Loaded ${allData.length} total data points`)
-      console.log(`Data range: ${new Date(allData[0]?.timestamp).toISOString()} to ${new Date(allData[allData.length - 1]?.timestamp).toISOString()}`)
-      
-      // Store full dataset for calculators
-      setFullData(allData)
-      
-      const filteredData = filterDataByTimeRange(allData, timeRange)
-      
-      if (filteredData.length === 0) {
-        throw new Error(`No data available for ${timeRange} range`)
-      }
-      
-      setData(filteredData)
-      console.log(`Set ${filteredData.length} data points for ${timeRange} range`)
-      
-      // Note: current price and price change will be calculated by the currency conversion useEffect
-      
-    } catch (error) {
-      console.error('Error loading data:', error)
-      setError(error instanceof Error ? error.message : 'Failed to load data')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [loadCSVData, filterDataByTimeRange, timeRange])
-
-  const checkForLiveUpdates = useCallback(async () => {
-    try {
-      const response = await fetch('/api/update-btc-csv', { method: 'GET' })
-      if (response.ok) {
-        const data = await response.json()
-        if (data.shouldUpdate) {
-          setUpdateStatus('Updating CSV data...')
-          const updateResponse = await fetch('/api/update-btc-csv', { 
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ days: 1 })
-          })
-          if (updateResponse.ok) {
-            setLastLiveUpdate(new Date())
-            setUpdateStatus('CSV data updated successfully')
-            setLastUpdateTime(new Date().toLocaleTimeString())
-            setTimeout(() => setUpdateStatus(''), 3000)
-            // Reload data after update
-            setTimeout(() => loadData(), 1000)
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error checking for updates:', error)
-    }
-  }, [loadData])
-
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  useEffect(() => {
-    checkForLiveUpdates()
-    const interval = setInterval(checkForLiveUpdates, 5 * 60 * 1000) // Check every 5 minutes
-    return () => clearInterval(interval)
-  }, [checkForLiveUpdates])
-
-  const formatXAxisTick = useCallback((tickItem: any) => {
-    const date = new Date(tickItem)
-    
-    // For zoomed view, show more detailed dates based on zoom range
-    if (isZoomed && left !== right) {
-      const daysDiff = Math.abs(right - left)
-      if (daysDiff <= 7) {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      } else if (daysDiff <= 30) {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      } else if (daysDiff <= 90) {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      } else {
-        return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-      }
-    }
-    
-    // For normal view, use time range based formatting
-    if (timeRange === '1D') {
-      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-    } else if (timeRange === '7D' || timeRange === '30D') {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    } else if (timeRange === '90D') {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    } else if (timeRange === '1Y') {
-      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-    } else if (timeRange === '5Y' || timeRange === '10Y') {
-      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
-    } else {
-      // For ALL time range, show more detailed dates
-      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-    }
-  }, [timeRange, isZoomed, left, right])
-
-  const selectedCurrencyInfo = useMemo(() => 
-    currencies.find(c => c.code === selectedCurrency), [currencies, selectedCurrency]
-  )
-
-  // X-axis zoom functions
-  const zoom = () => {
-    if (refAreaLeft === null || refAreaRight === null || refAreaLeft === refAreaRight) {
-      setRefAreaLeft(null)
-      setRefAreaRight(null)
-      return
-    }
-
-    const startIndex = Math.min(refAreaLeft, refAreaRight)
-    const endIndex = Math.max(refAreaLeft, refAreaRight)
-    
-    // Ensure we have valid indices within the data range
-    if (startIndex >= 0 && endIndex < convertedData.length && startIndex !== endIndex) {
-      setLeft(startIndex)
-      setRight(endIndex)
-      setIsZoomed(true)
-      // Store current preset range before zooming to custom
-      setLastPresetRange(timeRange)
-    }
-    
-    setRefAreaLeft(null)
-    setRefAreaRight(null)
-  }
-
-  const zoomOut = () => {
-    setLeft(0)
-    setRight(0)
-    setRefAreaLeft(null)
-    setRefAreaRight(null)
-    setIsZoomed(false)
-    // Return to the last preset range
-    setTimeRange(lastPresetRange)
-  }
-
-  const handleMouseDown = (e: any) => {
-    if (!e || e.activeLabel === undefined) return
-    // Find the index of the data point closest to the clicked position
-    const index = convertedData.findIndex(item => item.timestamp === e.activeLabel)
-    if (index !== -1) {
-      setRefAreaLeft(index)
-      setRefAreaRight(index) // Initialize right to same position for smoother selection
-    }
-  }
-
-  const handleMouseMove = (e: any) => {
-    if (!e || e.activeLabel === undefined || refAreaLeft === null) return
-    // Find the index of the data point closest to the current position
-    const index = convertedData.findIndex(item => item.timestamp === e.activeLabel)
-    if (index !== -1 && index !== refAreaRight) {
-      setRefAreaRight(index)
-    }
-  }
-
-  const handleMouseUp = () => {
-    if (refAreaLeft !== null && refAreaRight !== null && refAreaLeft !== refAreaRight) {
-      zoom()
-    } else {
-      // Reset if no valid selection
-      setRefAreaLeft(null)
-      setRefAreaRight(null)
-    }
-  }
-
-  const handleDoubleClick = () => {
-    zoomOut()
-  }
 
   // Notify parent component when data changes - pass full dataset for calculators
   useEffect(() => {
@@ -492,7 +378,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
 
   // Update price calculations when zoom state changes
   useEffect(() => {
-    if (convertedData.length > 0) {
+    if (convertedData.length > 0 && !isSelectingRange) {
       // Use filtered data based on current range
       let filteredData = convertedData
       
@@ -507,7 +393,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       setCurrentPrice(latest.price)
       setPriceChange(((latest.price - earliest.price) / earliest.price) * 100)
     }
-  }, [convertedData, isZoomed, left, right])
+  }, [convertedData, isZoomed, left, right, isSelectingRange])
 
   // Calculate Y-axis domain and ticks for better chart visibility
   const yAxisConfig = useMemo(() => {
@@ -593,33 +479,43 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     return { domain: [start, 'auto'] as [number, 'auto'], ticks: finalTicks }
   }, [convertedData, isZoomed, left, right])
 
-  // Custom cursor component with horizontal line
+  // Custom cursor component with lines attached to the data point
   const CustomCursor = ({ x, y, width, height }: any) => {
     if (!x || !y) return null
     
     return (
       <g>
-        {/* Vertical line */}
+        {/* Vertical line - from top to data point */}
         <line
           x1={x}
           y1={0}
           x2={x}
-          y2={height}
-          stroke="#f7931a"
-          strokeWidth={2}
-          strokeDasharray="3 3"
-          opacity={0.8}
-        />
-        {/* Horizontal line */}
-        <line
-          x1={0}
-          y1={y}
-          x2={width}
           y2={y}
           stroke="#f7931a"
           strokeWidth={2}
           strokeDasharray="3 3"
           opacity={0.8}
+        />
+        {/* Horizontal line - from left to data point */}
+        <line
+          x1={0}
+          y1={y}
+          x2={x}
+          y2={y}
+          stroke="#f7931a"
+          strokeWidth={2}
+          strokeDasharray="3 3"
+          opacity={0.8}
+        />
+        {/* Data point circle - enhanced visibility */}
+        <circle
+          cx={x}
+          cy={y}
+          r={6}
+          fill="#f7931a"
+          stroke="#ffffff"
+          strokeWidth={2}
+          opacity={1}
         />
       </g>
     )
@@ -627,8 +523,6 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
 
   // Use the independent tooltip component
   const renderTooltipContent = useCallback(({ active, payload, label }: any) => {
-    const selectedCurrencyInfo = currencies.find(c => c.code === selectedCurrency)
-    
     return (
       <BTCChartTooltipEnhanced
         active={active}
@@ -650,7 +544,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
         }}
       />
     )
-  }, [currencies, selectedCurrency, data, convertedData])
+  }, [selectedCurrency, selectedCurrencyInfo, data, convertedData])
 
   // Create chart data without markers
   const chartData = useMemo(() => {
@@ -678,6 +572,134 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     
     return result
   }, [convertedData, isZoomed, left, right])
+
+  const formatXAxisTick = useCallback((tickItem: any) => {
+    const date = new Date(tickItem)
+    
+    // For zoomed view, show more detailed dates based on zoom range
+    if (isZoomed && left !== right) {
+      const daysDiff = Math.abs(right - left)
+      if (daysDiff <= 7) {
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      } else if (daysDiff <= 30) {
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      } else if (daysDiff <= 90) {
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      } else {
+        return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+      }
+    }
+    
+    // For normal view, use time range based formatting
+    if (timeRange === '1D') {
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    } else if (timeRange === '7D' || timeRange === '30D') {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    } else if (timeRange === '90D') {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    } else if (timeRange === '1Y') {
+      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+    } else if (timeRange === '5Y' || timeRange === '10Y') {
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+    } else {
+      // For ALL time range, show more detailed dates
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    }
+  }, [timeRange, isZoomed, left, right])
+
+  // X-axis zoom functions
+  const zoom = () => {
+    if (refAreaLeft === null || refAreaRight === null || refAreaLeft === refAreaRight) {
+      setRefAreaLeft(null)
+      setRefAreaRight(null)
+      return
+    }
+
+    const startIndex = Math.min(refAreaLeft, refAreaRight)
+    const endIndex = Math.max(refAreaLeft, refAreaRight)
+    
+    // Ensure we have valid indices within the data range
+    if (startIndex >= 0 && endIndex < convertedData.length && startIndex !== endIndex) {
+      setLeft(startIndex)
+      setRight(endIndex)
+      setIsZoomed(true)
+      // Store current preset range before zooming to custom
+      setLastPresetRange(timeRange)
+    }
+    
+    setRefAreaLeft(null)
+    setRefAreaRight(null)
+  }
+
+  const zoomOut = () => {
+    setLeft(0)
+    setRight(0)
+    setRefAreaLeft(null)
+    setRefAreaRight(null)
+    setIsZoomed(false)
+    // Return to the last preset range
+    setTimeRange(lastPresetRange)
+  }
+
+  const handleMouseDown = (e: any) => {
+    if (!e || e.activeLabel === undefined) return
+    // Find the index of the data point closest to the clicked position
+    const index = convertedData.findIndex(item => item.timestamp === e.activeLabel)
+    if (index !== -1) {
+      setIsSelectingRange(true)
+      setRefAreaLeft(index)
+      setRefAreaRight(index) // Initialize right to same position for smoother selection
+      console.log('Mouse down at index:', index)
+    }
+  }
+
+  const handleMouseMove = (e: any) => {
+    if (!e) return
+    
+    // Always update cursor position for visual feedback
+    if (e.activeCoordinate) {
+      setCursorPosition({ x: e.activeCoordinate.x, y: e.activeCoordinate.y })
+      setIsHovering(true)
+    }
+    
+    // Handle range selection only if we have an active label
+    if (refAreaLeft !== null && e.activeLabel !== undefined) {
+      const index = convertedData.findIndex(item => item.timestamp === e.activeLabel)
+      if (index !== -1 && index !== refAreaRight) {
+        setRefAreaRight(index)
+        console.log('Mouse move - selection range:', refAreaLeft, 'to', index)
+      }
+    }
+  }
+
+
+
+  const handleChartMouseLeave = () => {
+    setIsHovering(false)
+    setCursorPosition(null)
+  }
+
+  const handleChartMouseEnter = (e: any) => {
+    setIsHovering(true)
+    if (e && e.activeCoordinate) {
+      setCursorPosition({ x: e.activeCoordinate.x, y: e.activeCoordinate.y })
+    }
+  }
+
+  const handleMouseUp = () => {
+    setIsSelectingRange(false)
+    if (refAreaLeft !== null && refAreaRight !== null && refAreaLeft !== refAreaRight) {
+      zoom()
+    } else {
+      // Reset if no valid selection
+      setRefAreaLeft(null)
+      setRefAreaRight(null)
+    }
+  }
+
+  const handleDoubleClick = () => {
+    zoomOut()
+  }
 
   return (
     <div className={`w-full h-full py-2 sm:py-4 flex flex-col ${className}`}>
@@ -723,6 +745,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     <SelectItem value="7D" className="text-white hover:bg-gray-700">7D</SelectItem>
                     <SelectItem value="30D" className="text-white hover:bg-gray-700">30D</SelectItem>
                     <SelectItem value="90D" className="text-white hover:bg-gray-700">90D</SelectItem>
+                    <SelectItem value="6mo" className="text-white hover:bg-gray-700">6mo</SelectItem>
                     <SelectItem value="1Y" className="text-white hover:bg-gray-700">1Y</SelectItem>
                     <SelectItem value="5Y" className="text-white hover:bg-gray-700">5Y</SelectItem>
                     <SelectItem value="10Y" className="text-white hover:bg-gray-700">10Y</SelectItem>
@@ -770,7 +793,49 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
             {/* Right: Refresh Button */}
             <Button
               size="sm"
-              onClick={loadData}
+              onClick={async () => {
+                setIsLoading(true)
+                setError(null)
+                
+                try {
+                  console.log(`🔄 Manual refresh for time range: ${timeRange}`)
+                  const apiData = await loadDataFromAPI(timeRange)
+                  
+                  if (apiData.length === 0) {
+                    throw new Error(`No data available for ${timeRange} range`)
+                  }
+                  
+                  console.log(`✅ Refreshed ${apiData.length} data points for ${timeRange}`)
+                  
+                  // Store data for current view
+                  setData(apiData)
+                  
+                  // For ALL time range, also load full dataset for calculators
+                  if (timeRange === 'ALL') {
+                    setFullData(apiData)
+                  } else {
+                    // Load full dataset separately for calculators
+                    try {
+                      const fullData = await loadDataFromAPI('ALL')
+                      setFullData(fullData)
+                    } catch (error) {
+                      console.warn('Failed to load full dataset for calculators:', error)
+                    }
+                  }
+                  
+                  setUpdateStatus('Data refreshed successfully')
+                  setLastUpdateTime(new Date().toLocaleTimeString())
+                  setTimeout(() => setUpdateStatus(''), 3000)
+                  
+                } catch (error) {
+                  console.error('Error refreshing data:', error)
+                  setError(error instanceof Error ? error.message : 'Failed to refresh data')
+                  setUpdateStatus('Refresh failed')
+                  setTimeout(() => setUpdateStatus(''), 3000)
+                } finally {
+                  setIsLoading(false)
+                }
+              }}
               className="h-8 px-3 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-medium shadow-lg hover:shadow-orange-500/25 transition-all duration-200"
             >
               <RefreshCw className="h-3 w-3 mr-1" />
@@ -804,19 +869,31 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                   <div className="text-center">
                     <div className="text-xs text-gray-400 mb-1 font-medium">Current Price</div>
                     <div className="text-lg font-bold text-orange-400">
-                      {formatPrice(endingPrice, selectedCurrencyInfo?.symbol)}
+                      {realTimePriceData ? (
+                        formatPrice(realTimePriceData.price, selectedCurrencyInfo?.symbol)
+                      ) : (
+                        formatPrice(endingPrice, selectedCurrencyInfo?.symbol)
+                      )}
                     </div>
                   </div>
                   <div className="text-center">
                     <div className="text-xs text-gray-400 mb-1 font-medium">Change</div>
-                    <div className={`text-lg font-bold ${rangePriceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {rangePriceChange >= 0 ? '+' : ''}{rangePriceChange.toFixed(2)}%
+                    <div className={`text-lg font-bold ${
+                      realTimePriceData ? 
+                        ((realTimePriceData.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400') :
+                        (rangePriceChange >= 0 ? 'text-green-400' : 'text-red-400')
+                    }`}>
+                      {realTimePriceData ? (
+                        `${(realTimePriceData.price_change_percentage_24h ?? 0) >= 0 ? '+' : ''}${(realTimePriceData.price_change_percentage_24h ?? 0).toFixed(2)}%`
+                      ) : (
+                        `${rangePriceChange >= 0 ? '+' : ''}${rangePriceChange.toFixed(2)}%`
+                      )}
                     </div>
                   </div>
                   <div className="text-center">
                     <div className="text-xs text-gray-400 mb-1 font-medium">Date Range</div>
                     <div className="text-sm font-medium text-white">
-                      {new Date(filteredData[0].timestamp).toLocaleDateString()} - {new Date(filteredData[filteredData.length - 1].timestamp).toLocaleDateString()}
+                      {new Date(convertedData[0].timestamp).toLocaleDateString()} - {new Date(convertedData[convertedData.length - 1].timestamp).toLocaleDateString()}
                     </div>
                   </div>
                 </div>
@@ -848,6 +925,8 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onDoubleClick={handleDoubleClick}
+                onMouseEnter={handleChartMouseEnter}
+                onMouseLeave={handleChartMouseLeave}
                 syncId="btc-chart"
               >
                 <defs>
@@ -890,10 +969,13 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                   domain={yAxisConfig.domain}
                   allowDataOverflow={false}
                 />
-                                 <ChartTooltip
+                <ChartTooltip
                   cursor={<CustomCursor />}
                   content={renderTooltipContent}
+                  isAnimationActive={false}
+                  cursorStyle={{ stroke: '#f7931a', strokeWidth: 3, strokeDasharray: '5 5' }}
                 />
+                {/* Hover cursor - shows on mouse move */}
                 {/* Selection cursor - shows during drag */}
                 {refAreaLeft !== null && (
                   <ReferenceLine
@@ -952,8 +1034,30 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     fillOpacity={0.2}
                   />
                 ) : null}
+                {/* Hover cursor - shows when mouse is over chart */}
+                {isHovering && cursorPosition && (
+                  <ReferenceLine
+                    x={cursorPosition.x}
+                    stroke="#f7931a"
+                    strokeWidth={3}
+                    strokeDasharray="5 5"
+                    opacity={0.9}
+                    isFront={true}
+                  />
+                )}
               </AreaChart>
             </ResponsiveContainer>
+            
+            {/* Range Selection Instructions */}
+            {!isZoomed && refAreaLeft === null && (
+              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none">
+                <div className="bg-gray-900/80 border border-gray-600/30 rounded-lg px-3 py-2 text-center shadow-lg backdrop-blur-sm">
+                  <div className="text-gray-400 text-xs select-none">
+                    Click and drag to select a range
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Date Range Selection Overlay - Positioned at top, non-interactive */}
             {refAreaLeft !== null && refAreaRight !== null && (

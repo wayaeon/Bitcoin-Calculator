@@ -1,15 +1,23 @@
 # BTC Data Scheduled Updates Setup
 
-This document explains how to set up automatic updates for the BTC price data at 7:00 AM and 7:00 PM daily.
+This document explains how to set up automatic updates for the BTC price data every 270 seconds (4.5 minutes).
 
 ## How It Works
 
-The system uses your CSV file (`BTC Price History.csv`) as the primary data source and updates it with live CoinGecko API data twice daily. The updates include:
+The system updates the `realtime_btc_prices` table in Supabase with live CoinGecko API data every 270 seconds. The updates include:
 
 - **Current BTC Price** (Close price)
 - **24h Volume** 
 - **Market Cap**
-- **High/Low prices** (updated if current price exceeds previous range)
+- **Price Change 24h**
+- **Price Change Percentage 24h**
+
+## Update Frequency
+
+- **Every 270 seconds (4.5 minutes)**
+- **320 updates per day**
+- **11,680 updates per month**
+- **116,800 updates per year**
 
 ## Setup Options
 
@@ -17,11 +25,13 @@ The system uses your CSV file (`BTC Price History.csv`) as the primary data sour
 
 If you have access to a server with cron:
 
-1. **Create a cron job** to call the update endpoint:
+1. **Create a cron job** to call the update endpoint every 270 seconds:
 
 ```bash
 # Add to your crontab (crontab -e)
-0 7,19 * * * curl -X POST https://your-domain.com/api/cron/update-btc -H "Authorization: Bearer YOUR_SECRET_KEY"
+# Run every 4.5 minutes (270 seconds)
+*/4 * * * * curl -X POST https://your-domain.com/api/cron/update-btc -H "Authorization: Bearer YOUR_SECRET_KEY"
+*/9 * * * * curl -X POST https://your-domain.com/api/cron/update-btc -H "Authorization: Bearer YOUR_SECRET_KEY"
 ```
 
 2. **Set up environment variable** for the secret key:
@@ -42,7 +52,11 @@ Add this to your `vercel.json`:
   "crons": [
     {
       "path": "/api/cron/update-btc",
-      "schedule": "0 7,19 * * *"
+      "schedule": "*/4 * * * *"
+    },
+    {
+      "path": "/api/cron/update-btc", 
+      "schedule": "*/9 * * * *"
     }
   ]
 }
@@ -57,7 +71,8 @@ name: BTC Data Update
 
 on:
   schedule:
-    - cron: '0 7,19 * * *'
+    - cron: '*/4 * * * *'
+    - cron: '*/9 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -77,11 +92,13 @@ Services like:
 - **EasyCron** (free tier available)
 - **SetCronJob** (free tier available)
 
-Set up a cron job to call:
+Set up cron jobs to call:
 ```
 POST https://your-domain.com/api/cron/update-btc
 Headers: Authorization: Bearer YOUR_SECRET_KEY
 ```
+
+**Schedule:** Every 270 seconds (4.5 minutes)
 
 ## Manual Testing
 
@@ -106,12 +123,21 @@ The system provides several ways to monitor updates:
 2. **Component Display**: The chart shows last update time
 3. **API Endpoints**: Check update status via API calls
 
+## Database Performance
+
+The `realtime_btc_prices` table is designed to handle:
+- **320 updates per day**
+- **11,680 updates per month** 
+- **116,800 updates per year**
+
+Consider implementing a data retention policy to keep only recent data (e.g., last 30-90 days) for optimal performance.
+
 ## Troubleshooting
 
 ### Common Issues
 
 1. **File Permissions**: Ensure the CSV file is writable
-2. **API Rate Limits**: CoinGecko has rate limits, but the twice-daily schedule should be fine
+2. **API Rate Limits**: CoinGecko has rate limits, but the 270-second interval should be fine
 3. **Network Issues**: The system will retry on next scheduled update
 
 ### Debug Information
@@ -131,7 +157,7 @@ The system logs:
 
 ## Data Integrity
 
-- The system only updates the latest row in the CSV
-- Historical data remains unchanged
+- Each update stores a complete price record
+- Historical data is preserved
 - Updates are atomic (all-or-nothing)
-- Backup your CSV file regularly 
+- Backup your database regularly 

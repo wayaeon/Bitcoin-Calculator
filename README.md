@@ -9,7 +9,7 @@ A modern web application starter template built with Next.js 14, featuring authe
 
 - **Framework:** [Next.js 14](https://nextjs.org/) (App Router)
 - **Authentication:** [Clerk](https://clerk.com/)
-- **Database:** [Supabase](https://supabase.com/)
+- **Database:** Local CSV files
 - **Styling:** [Tailwind CSS](https://tailwindcss.com/)
 - **UI Components:** [shadcn/ui](https://ui.shadcn.com/)
 
@@ -18,7 +18,7 @@ A modern web application starter template built with Next.js 14, featuring authe
 Before you begin, ensure you have the following:
 - Node.js 18+ installed
 - A [Clerk](https://clerk.com/) account for authentication
-- A [Supabase](https://supabase.com/) account for database
+- Local CSV files for data storage
 - Generated project documents from [CodeGuide](https://codeguide.dev/) for best development experience
 
 ## Getting Started
@@ -64,12 +64,10 @@ Before you begin, ensure you have the following:
 3. Go to API Keys
 4. Copy the `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`
 
-### Supabase Setup
-1. Go to [Supabase Dashboard](https://app.supabase.com/)
-2. Create a new project
-3. Go to Project Settings > API
-4. Copy the `Project URL` as `NEXT_PUBLIC_SUPABASE_URL`
-5. Copy the `anon` public key as `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+### Data Setup
+1. Ensure your CSV files are in the `public/` directory
+2. The application uses local CSV files for BTC price data
+3. No external database setup required
 
 ## Environment Variables
 
@@ -80,15 +78,14 @@ Create a `.env` file in the root directory with the following variables:
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_publishable_key
 CLERK_SECRET_KEY=your_secret_key
 
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+# Data Files
+# No external database configuration needed
 ```
 
 ## Features
 
 - 🔐 Authentication with Clerk
-- 📦 Supabase Database
+- 📦 Local CSV Data Storage
 - 🎨 Modern UI with Tailwind CSS
 - 🚀 App Router Ready
 - 🔄 Real-time Updates
@@ -104,7 +101,7 @@ codeguide-starter/
 ├── public/            # Static assets
 ├── styles/            # Global styles
 ├── documentation/     # Generated documentation from CodeGuide
-└── supabase/          # Supabase configurations and migrations
+└── public/            # CSV data files
 ```
 
 ## Documentation Setup
