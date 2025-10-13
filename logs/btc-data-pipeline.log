@@ -1,0 +1,10 @@
+[2025-10-12T03:02:36.908Z] [INFO] [Collector] Starting data collection...
+[2025-10-12T03:02:37.371Z] [INFO] [Collector] Successfully fetched fresh data from API {"price":110190}
+[2025-10-12T03:02:37.405Z] [INFO] [Collector] Saved data to CSV (11 entries)
+[2025-10-12T03:02:37.408Z] [INFO] [Consolidator] Starting data consolidation...
+[2025-10-12T03:02:37.406Z] [INFO] [Collector] Data collection completed successfully
+[2025-10-12T03:02:37.442Z] [INFO] [Consolidator] Found 1 entries from last 24 hours
+[2025-10-12T03:02:37.443Z] [INFO] [Consolidator] Added new row for 2025-10-12
+[2025-10-12T03:02:37.457Z] [INFO] [Consolidator] Wrote 484 rows to historical CSV
+[2025-10-12T03:02:37.461Z] [INFO] [Consolidator] Trimmed realtime CSV to 1 entries
+[2025-10-12T03:02:37.467Z] [INFO] [Consolidator] Data consolidation completed successfully {"realtimeEntries":1,"newRowsAdded":1,"rowsUpdated":0}

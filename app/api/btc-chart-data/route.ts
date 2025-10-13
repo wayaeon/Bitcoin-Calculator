@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { BTCRealtimeCSVService, BTCHistoricalCSVService } from '@/lib/btc-realtime-csv-service'
+import { getConsolidationStatus } from '@/lib/btc-data-consolidator'
+import { promises as fs } from 'fs'
+import path from 'path'
 
 export async function GET(request: NextRequest) {
   try {
@@ -79,15 +82,19 @@ export async function GET(request: NextRequest) {
       // For very long ranges, sample the data to prevent timeouts
       let limitedHistoricalData = historicalData
       if (timeRange === 'ALL' && historicalData.length > 1000) {
-        // Sample every nth record for ALL time range
-        const step = Math.ceil(historicalData.length / 1000)
-        limitedHistoricalData = historicalData.filter((_, index) => index % step === 0)
-        console.log(`📊 Sampled ${limitedHistoricalData.length} points from ${historicalData.length} total`)
+        // Sample every nth record for ALL time range, but always include the last 100 records
+        const step = Math.ceil((historicalData.length - 100) / 900) // Reserve 100 for recent data
+        const sampledData = historicalData.slice(0, -100).filter((_, index) => index % step === 0)
+        const recentData = historicalData.slice(-100) // Always include last 100 records
+        limitedHistoricalData = [...sampledData, ...recentData]
+        console.log(`📊 Sampled ${limitedHistoricalData.length} points from ${historicalData.length} total (${sampledData.length} sampled + ${recentData.length} recent)`)
       } else if (historicalData.length > 2000) {
-        // For other long ranges, sample evenly across the entire range
-        const step = Math.ceil(historicalData.length / 2000)
-        limitedHistoricalData = historicalData.filter((_, index) => index % step === 0)
-        console.log(`📊 Sampled ${limitedHistoricalData.length} points from ${historicalData.length} total`)
+        // For other long ranges, sample evenly across the entire range, but always include recent data
+        const step = Math.ceil((historicalData.length - 100) / 1900) // Reserve 100 for recent data
+        const sampledData = historicalData.slice(0, -100).filter((_, index) => index % step === 0)
+        const recentData = historicalData.slice(-100) // Always include last 100 records
+        limitedHistoricalData = [...sampledData, ...recentData]
+        console.log(`📊 Sampled ${limitedHistoricalData.length} points from ${historicalData.length} total (${sampledData.length} sampled + ${recentData.length} recent)`)
       }
       
       chartData = limitedHistoricalData.map(item => ({
@@ -108,6 +115,19 @@ export async function GET(request: NextRequest) {
     
     console.log(`✅ Final chart data: ${chartData.length} data points`)
     
+    // Get consolidation status for last updated info
+    const consolidationStatus = await getConsolidationStatus()
+    
+    // Get file modification time
+    let lastFileUpdate: string | null = null
+    try {
+      const csvPath = path.join(process.cwd(), 'public', 'BTC Price History copy.csv')
+      const stats = await fs.stat(csvPath)
+      lastFileUpdate = stats.mtime.toISOString()
+    } catch (error) {
+      // Ignore errors
+    }
+    
     return NextResponse.json({ 
       success: true,
       data: chartData,
@@ -116,7 +136,12 @@ export async function GET(request: NextRequest) {
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
       count: chartData.length,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      lastUpdated: {
+        consolidationStatus: consolidationStatus.status,
+        lastHistoricalDate: consolidationStatus.lastHistoricalDate,
+        fileModified: lastFileUpdate
+      }
     })
     
   } catch (error) {

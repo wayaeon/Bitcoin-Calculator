@@ -1,8 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/cron/update-btc",
+      "path": "/api/cron/update-btc-realtime",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/update-btc-data/update-btc-daily",
+      "schedule": "0 7,19 * * *"
     }
   ]
 } 

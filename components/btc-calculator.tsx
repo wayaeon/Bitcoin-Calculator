@@ -230,7 +230,7 @@ export function BTCCalculator() {
       </div>
 
       {/* Main Content Area - Responsive */}
-      <div className="container mx-auto px-4 py-2 relative z-10 h-[calc(100vh-80px)] sm:h-[calc(100vh-100px)] flex items-center justify-center">
+      <div className="container mx-auto px-4 py-1 relative z-10 h-[calc(100vh-70px)] sm:h-[calc(100vh-80px)] flex items-center justify-center">
         {/* Full Window Price History */}
         <div className="w-full max-w-7xl h-full flex flex-col">
           <BTCPriceHistory 

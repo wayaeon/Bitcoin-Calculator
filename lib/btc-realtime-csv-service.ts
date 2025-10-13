@@ -182,7 +182,8 @@ export class BTCHistoricalCSVService {
       
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i]
-        const values = line.split(',')
+        // Handle both tab and comma delimiters
+        const values = line.includes('\t') ? line.split('\t') : line.split(',')
         
         // Handle inconsistent column counts - some rows have 8 columns, others have 9
         if (values.length < 8) {

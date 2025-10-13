@@ -397,7 +397,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
 
   // Calculate Y-axis domain and ticks for better chart visibility
   const yAxisConfig = useMemo(() => {
-    if (convertedData.length === 0) return { domain: [0, 'auto'], ticks: [] }
+    if (convertedData.length === 0) return { domain: [0, 'auto' as const], ticks: [] }
     
     let filteredData = convertedData
     
@@ -702,7 +702,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   }
 
   return (
-    <div className={`w-full h-full py-2 sm:py-4 flex flex-col ${className}`}>
+    <div className={`w-full h-full py-1 flex flex-col ${className}`}>
       {/* Chart Section - Flexible Height */}
       <div className="flex-1 min-h-0 relative">
         
@@ -902,8 +902,8 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
           })()}
         </div>
         
-        {/* Chart Container - Responsive Height - Extends to bottom stats */}
-        <div className="w-full h-[calc(100vh-220px)] sm:h-[calc(100vh-270px)] lg:h-[calc(100vh-270px)] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-8 sm:pb-10 lg:pb-12 relative mb-4">
+        {/* Chart Container - Maximized Height */}
+        <div className="w-full h-[calc(100vh-280px)] sm:h-[calc(100vh-300px)] lg:h-[calc(100vh-320px)] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-1 sm:pb-1 lg:pb-2 relative mb-2">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-orange-500"></div>
@@ -966,7 +966,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                   tickLine={false}
                   axisLine={false}
                   width={60}
-                  domain={yAxisConfig.domain}
+                  domain={yAxisConfig.domain as any}
                   allowDataOverflow={false}
                 />
                 <ChartTooltip
@@ -984,6 +984,23 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     strokeWidth={2}
                     strokeDasharray="3 3"
                     opacity={0.8}
+                  />
+                )}
+                {/* Real-time Price Reference Line */}
+                {realTimePriceData && (
+                  <ReferenceLine
+                    y={realTimePriceData.price}
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    label={{
+                      value: `Live: ${formatPrice(realTimePriceData.price, selectedCurrencyInfo?.symbol)}`,
+                      position: 'right',
+                      fill: '#10b981',
+                      fontSize: 12,
+                      fontWeight: 'bold',
+                      offset: 10
+                    }}
                   />
                 )}
                 <Area
@@ -1048,6 +1065,30 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
               </AreaChart>
             </ResponsiveContainer>
             
+            {/* Live Price Pulsing Indicator */}
+            {realTimePriceData && convertedData.length > 0 && (
+              <div className="absolute top-4 right-4 bg-gray-900/90 border border-green-500/50 rounded-lg px-4 py-2 backdrop-blur-sm shadow-xl">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  </div>
+                  <div className="text-xs text-green-400 font-semibold">
+                    LIVE
+                  </div>
+                  <div className="text-sm text-white font-bold">
+                    {formatPrice(realTimePriceData.price, selectedCurrencyInfo?.symbol)}
+                  </div>
+                  <div className={`text-xs font-semibold ${
+                    (realTimePriceData.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {(realTimePriceData.price_change_percentage_24h ?? 0) >= 0 ? '+' : ''}
+                    {(realTimePriceData.price_change_percentage_24h ?? 0).toFixed(2)}%
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Range Selection Instructions */}
             {!isZoomed && refAreaLeft === null && (
               <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none">
@@ -1095,9 +1136,9 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
           )}
         </div>
 
-        {/* Bottom Statistics - Responsive Grid - Always Visible */}
+        {/* Bottom Statistics - Minimal Spacing */}
         {convertedData.length > 0 && (
-          <div className="flex-shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-4 sm:pt-6">
+          <div className="flex-shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-2 pb-2 bg-gray-900/30 rounded-lg border border-gray-700/20 px-4 sm:px-6">
             <div className="text-center">
               <div className="text-xs text-gray-400 mb-1">24h Volume</div>
               <div className="text-xs sm:text-sm font-bold text-white">

@@ -1,11 +1,20 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { TrendingUp, X, DollarSign, Calendar, Clock, Target } from 'lucide-react'
+import { TrendingUp, X, DollarSign, Calendar, Clock, Target, Pizza } from 'lucide-react'
+import { 
+  loadBTCHistoricalData, 
+  getPriceAtDate,
+  getCurrentPrice,
+  formatCurrencyWithSymbol,
+  formatPercentage,
+  formatBTCAmount,
+  calculateAnnualizedReturn
+} from '@/lib/calculator-utils'
 
 interface BTCPriceData {
   timestamp: number
@@ -55,17 +64,38 @@ export const RegretCalculator = ({
   })
   const [result, setResult] = useState<CalculationResult | null>(null)
 
-  // Updated preset date options that go back to 2009
-  const presetDates: PresetDate[] = [
+  const [isLoadingData, setIsLoadingData] = useState(false)
+  const [historicalData, setHistoricalData] = useState<any[]>([])
+  
+  // Enhanced preset date options with notable Bitcoin moments
+  const presetDates: PresetDate[] = useMemo(() => [
     { label: '1 Year Ago', yearsAgo: 1, description: 'Invested 1 year ago' },
     { label: '2 Years Ago', yearsAgo: 2, description: 'Invested 2 years ago' },
     { label: '3 Years Ago', yearsAgo: 3, description: 'Invested 3 years ago' },
     { label: '5 Years Ago', yearsAgo: 5, description: 'Invested 5 years ago' },
     { label: '10 Years Ago', yearsAgo: 10, description: 'Invested 10 years ago' },
+    { label: 'Bitcoin Pizza Day (May 22, 2010)', yearsAgo: 0, description: 'First real-world BTC transaction' },
+    { label: 'First Exchange (July 17, 2010)', yearsAgo: 0, description: 'Mt. Gox opens trading' },
     { label: 'Bitcoin Early Days (2013)', yearsAgo: 12, description: 'Early Bitcoin adoption' },
     { label: 'Bitcoin Genesis (2010)', yearsAgo: 15, description: 'Very early Bitcoin' },
-    { label: 'Bitcoin Launch (2009)', yearsAgo: 16, description: 'Bitcoin genesis block era' }
-  ]
+    { label: 'Bitcoin Launch (Jan 3, 2009)', yearsAgo: 16, description: 'Genesis block' }
+  ], [])
+  
+  // Load historical data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoadingData(true)
+      try {
+        const data = await loadBTCHistoricalData()
+        setHistoricalData(data)
+      } catch (error) {
+        console.error('Error loading historical data:', error)
+      } finally {
+        setIsLoadingData(false)
+      }
+    }
+    loadData()
+  }, [])
 
   // Get available years from data
   const getAvailableYears = () => {

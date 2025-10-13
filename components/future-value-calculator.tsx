@@ -1,12 +1,21 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
-import { TrendingUp, X, DollarSign, Calendar, Target, BarChart3, Zap } from 'lucide-react'
+import { TrendingUp, X, DollarSign, Calendar, Target, BarChart3, Zap, Info } from 'lucide-react'
+import { 
+  calculateHistoricalCAGR, 
+  getCurrentPrice, 
+  calculateHistoricalVolatility,
+  formatCurrencyWithSymbol,
+  formatPercentage,
+  formatBTCAmount,
+  getInvestmentScenarios
+} from '@/lib/calculator-utils'
 
 interface FutureValueCalculatorProps {
   isOpen: boolean
@@ -42,23 +51,68 @@ export const FutureValueCalculator = ({
     dcaAmount: 1000,
     dcaFrequency: 'monthly' as 'daily' | 'monthly' | 'quarterly' | 'yearly',
     startYear: 2024,
-    endYear: 2040, // Changed default to 2040
-    currentBTCPrice: 117877, // Current BTC price
-    cagr: 58 // Default 58% CAGR
+    endYear: 2040,
+    currentBTCPrice: 117877,
+    cagr: 58
   })
   const [result, setResult] = useState<CalculationResult | null>(null)
   const [isDisclaimerExpanded, setIsDisclaimerExpanded] = useState(false)
+  const [isLoadingData, setIsLoadingData] = useState(false)
+  const [historicalCAGR, setHistoricalCAGR] = useState<number | null>(null)
+  const [volatility, setVolatility] = useState<number>(0.15)
+  const [selectedScenario, setSelectedScenario] = useState<string>('Moderate')
+  
+  const scenarios = useMemo(() => getInvestmentScenarios(), [])
+
+  // Load historical data on mount
+  useEffect(() => {
+    const loadHistoricalData = async () => {
+      setIsLoadingData(true)
+      try {
+        const [cagr, currentPrice, vol] = await Promise.all([
+          calculateHistoricalCAGR(),
+          getCurrentPrice(),
+          calculateHistoricalVolatility(365)
+        ])
+        
+        setHistoricalCAGR(cagr)
+        setVolatility(vol)
+        setInputs(prev => ({
+          ...prev,
+          currentBTCPrice: currentPrice,
+          cagr: Math.round(cagr)
+        }))
+      } catch (error) {
+        console.error('Error loading historical data:', error)
+      } finally {
+        setIsLoadingData(false)
+      }
+    }
+    
+    loadHistoricalData()
+  }, [])
+
+  // Update CAGR when scenario changes
+  useEffect(() => {
+    if (historicalCAGR && selectedScenario) {
+      const scenario = scenarios.find(s => s.name === selectedScenario)
+      if (scenario) {
+        const adjustedCAGR = Math.round(historicalCAGR * scenario.cagrMultiplier)
+        setInputs(prev => ({ ...prev, cagr: adjustedCAGR }))
+      }
+    }
+  }, [selectedScenario, historicalCAGR, scenarios])
 
   // Calculate years between start and end
   const years = inputs.endYear - inputs.startYear
 
-  // Calculate future BTC price based on CAGR
-  const calculateFutureBTCPrice = () => {
+  // Calculate future BTC price based on CAGR (memoized)
+  const calculateFutureBTCPrice = useCallback(() => {
     return inputs.currentBTCPrice * Math.pow(1 + inputs.cagr / 100, years)
-  }
+  }, [inputs.currentBTCPrice, inputs.cagr, years])
 
-  // Calculate future value based on investment type
-  const calculateFutureValue = () => {
+  // Calculate future value based on investment type (memoized)
+  const calculateFutureValue = useCallback(() => {
     const futureBTCPrice = calculateFutureBTCPrice()
     const currentPrice = inputs.currentBTCPrice
     
@@ -68,7 +122,6 @@ export const FutureValueCalculator = ({
 
     if (investmentType === 'one-time' || investmentType === 'both') {
       const oneTimeBitcoins = inputs.oneTimeAmount / currentPrice
-      const oneTimeFutureValue = oneTimeBitcoins * futureBTCPrice
       totalInvestment += inputs.oneTimeAmount
       totalBitcoins += oneTimeBitcoins
       breakdown = { ...breakdown, oneTimeInvestment: inputs.oneTimeAmount, oneTimeBitcoins }
@@ -105,7 +158,7 @@ export const FutureValueCalculator = ({
 
     const futureValue = totalBitcoins * futureBTCPrice
     const totalReturn = ((futureValue / totalInvestment - 1) * 100)
-    const annualizedReturn = Math.pow(futureValue / totalInvestment, 1 / years) - 1
+    const annualizedReturn = totalInvestment > 0 ? Math.pow(futureValue / totalInvestment, 1 / years) - 1 : 0
 
     return {
       totalInvestment,
@@ -116,7 +169,7 @@ export const FutureValueCalculator = ({
       cagr: inputs.cagr,
       breakdown
     }
-  }
+  }, [inputs, investmentType, years, calculateFutureBTCPrice])
 
   useEffect(() => {
     if (inputs.oneTimeAmount > 0 || inputs.dcaAmount > 0) {
@@ -193,6 +246,39 @@ export const FutureValueCalculator = ({
               </div>
             )}
           </div>
+
+          {/* Loading Indicator */}
+          {isLoadingData && (
+            <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-3 flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+              <span className="text-sm text-blue-300">Loading historical data...</span>
+            </div>
+          )}
+
+          {/* Investment Scenario Selection */}
+          {historicalCAGR && (
+            <div className="space-y-2 sm:space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs sm:text-sm font-medium text-gray-300">Investment Scenario</Label>
+                <Info className="h-3 w-3 text-gray-400" title="Based on historical CAGR" />
+              </div>
+              <Select value={selectedScenario} onValueChange={setSelectedScenario}>
+                <SelectTrigger className="border-gray-600 bg-gray-800 text-white h-9 sm:h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-700">
+                  {scenarios.map(scenario => (
+                    <SelectItem key={scenario.name} value={scenario.name} className="text-white hover:bg-gray-700">
+                      {scenario.name} - {scenario.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="text-xs text-gray-400 mt-1">
+                Historical CAGR: {historicalCAGR.toFixed(1)}% (Adjusted: {inputs.cagr}%)
+              </div>
+            </div>
+          )}
 
           {/* Investment Type Selection */}
           <div className="space-y-2 sm:space-y-3">
