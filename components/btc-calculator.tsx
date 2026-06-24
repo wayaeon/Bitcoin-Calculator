@@ -22,8 +22,6 @@ import {
   Rocket,
   ChevronUp,
   ChevronDown,
-  Menu,
-  Settings,
   Share2
 } from 'lucide-react'
 import { 
@@ -208,21 +206,6 @@ export function BTCCalculator() {
                 className="h-8 w-8 sm:h-9 sm:px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
               >
                 <Share2 className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 w-8 sm:h-9 sm:px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              <div className="w-px h-6 bg-gray-700"></div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 w-8 sm:h-9 sm:px-3 text-gray-300 hover:text-white hover:bg-gray-800/50"
-              >
-                <Menu className="h-4 w-4" />
               </Button>
             </div>
           </div>

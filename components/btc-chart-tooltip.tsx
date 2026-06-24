@@ -225,38 +225,70 @@ export const BTCChartTooltipEnhanced = ({
         </div>
       )}
 
-      {/* Date */}
+      {/* Date — show time for sub-daily candles */}
       <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
         <Calendar className="h-3 w-3" />
         <span>
-          {currentDate.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-          })}
+          {(() => {
+            const dp = payload[0]?.payload
+            const isSubDaily = dp?.dataSource === 'coingecko_ohlc' || dp?.dataSource === 'coingecko_live'
+            return isSubDaily
+              ? currentDate.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          })()}
         </span>
       </div>
 
-      {/* Additional metrics */}
+      {/* OHLC — shown whenever open/high/low/close are present */}
+      {(() => {
+        const dp = payload[0]?.payload
+        if (!dp?.open) return null
+        return (
+          <div className="mb-3 pt-2 border-t border-gray-700/60">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-400">Open</span>
+                <span className="text-white font-medium">{formatPrice(dp.open, selectedCurrencySymbol)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-400">Close</span>
+                <span className="text-white font-medium">{formatPrice(dp.close, selectedCurrencySymbol)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-green-400">High</span>
+                <span className="text-white font-medium">{formatPrice(dp.high, selectedCurrencySymbol)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-red-400">Low</span>
+                <span className="text-white font-medium">{formatPrice(dp.low, selectedCurrencySymbol)}</span>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Volume + Market Cap */}
       {currentDataPoint && (showVolume || showMarketCap) && (
-        <div className="pt-3 border-t border-gray-700">
+        <div className="pt-2 border-t border-gray-700/60">
           <div className="grid grid-cols-2 gap-4 text-xs">
-                         {showVolume && currentDataPoint.volume !== undefined && (
-               <div>
-                 <span className="text-gray-400">Volume:</span>
-                 <div className="text-white font-medium">
-                   {currentDataPoint.volume === 0 ? 'Unknown' : currentDataPoint.volume.toLocaleString()}
-                 </div>
-               </div>
-             )}
-                         {showMarketCap && currentDataPoint.marketCap && (
-               <div>
-                 <span className="text-gray-400">Market Cap:</span>
-                 <div className="text-white font-medium">
-                   {formatMarketCap(currentDataPoint.marketCap, selectedCurrencySymbol)}
-                 </div>
-               </div>
-             )}
+            {showVolume && currentDataPoint.volume != null && currentDataPoint.volume > 0 && (
+              <div>
+                <span className="text-gray-400">Volume</span>
+                <div className="text-white font-medium">{Math.round(currentDataPoint.volume).toLocaleString()}</div>
+              </div>
+            )}
+            {showMarketCap && currentDataPoint.marketCap > 0 && (
+              <div>
+                <span className="text-gray-400">Mkt Cap</span>
+                <div className="text-white font-medium">{formatMarketCap(currentDataPoint.marketCap, selectedCurrencySymbol)}</div>
+              </div>
+            )}
+            {currentDataPoint.circulatingSupply > 0 && (
+              <div>
+                <span className="text-gray-400">In Circulation</span>
+                <div className="text-white font-medium">{Math.round(currentDataPoint.circulatingSupply).toLocaleString()} BTC</div>
+              </div>
+            )}
           </div>
         </div>
       )}

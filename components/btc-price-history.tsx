@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import * as SelectPrimitive from '@radix-ui/react-select'
+import { Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { RefreshCw, TrendingUp, Database, Clock, BarChart3, Calendar, DollarSign, ZoomOut } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ReferenceArea, ReferenceLine } from 'recharts'
@@ -23,8 +25,14 @@ import { useBTCPrice } from '@/hooks/use-btc-price'
 interface BTCPriceData {
   timestamp: number
   price: number
+  open?: number
+  high?: number
+  low?: number
+  close?: number
   volume?: number
   marketCap?: number
+  circulatingSupply?: number
+  dataSource?: string
 }
 
 interface BTCPriceHistoryProps {
@@ -32,15 +40,51 @@ interface BTCPriceHistoryProps {
   onDataUpdate?: (data: any[], currency: string, currencySymbol: string) => void
 }
 
+// ponytail: constants outside component — never reconstructed on render
+const CURRENCIES = [
+  { code: 'USD', symbol: '$',    name: 'US Dollar',          flag: '🇺🇸' },
+  { code: 'EUR', symbol: '€',    name: 'Euro',               flag: '🇪🇺' },
+  { code: 'GBP', symbol: '£',    name: 'British Pound',      flag: '🇬🇧' },
+  { code: 'JPY', symbol: '¥',    name: 'Japanese Yen',       flag: '🇯🇵' },
+  { code: 'CAD', symbol: 'C$',   name: 'Canadian Dollar',    flag: '🇨🇦' },
+  { code: 'AUD', symbol: 'A$',   name: 'Australian Dollar',  flag: '🇦🇺' },
+  { code: 'CHF', symbol: 'CHF',  name: 'Swiss Franc',        flag: '🇨🇭' },
+  { code: 'CNY', symbol: '¥',    name: 'Chinese Yuan',       flag: '🇨🇳' },
+  { code: 'INR', symbol: '₹',    name: 'Indian Rupee',       flag: '🇮🇳' },
+  { code: 'BRL', symbol: 'R$',   name: 'Brazilian Real',     flag: '🇧🇷' },
+  { code: 'KRW', symbol: '₩',    name: 'South Korean Won',   flag: '🇰🇷' },
+  { code: 'RUB', symbol: '₽',    name: 'Russian Ruble',      flag: '🇷🇺' },
+  { code: 'MXN', symbol: '$',    name: 'Mexican Peso',       flag: '🇲🇽' },
+  { code: 'SGD', symbol: 'S$',   name: 'Singapore Dollar',   flag: '🇸🇬' },
+  { code: 'HKD', symbol: 'HK$',  name: 'Hong Kong Dollar',   flag: '🇭🇰' },
+  { code: 'NZD', symbol: 'NZ$',  name: 'New Zealand Dollar', flag: '🇳🇿' },
+  { code: 'SEK', symbol: 'kr',   name: 'Swedish Krona',      flag: '🇸🇪' },
+  { code: 'NOK', symbol: 'kr',   name: 'Norwegian Krone',    flag: '🇳🇴' },
+  { code: 'DKK', symbol: 'kr',   name: 'Danish Krone',       flag: '🇩🇰' },
+  { code: 'PLN', symbol: 'zł',   name: 'Polish Złoty',       flag: '🇵🇱' },
+]
+
+// Outside component — never redefined on render
+const CustomCursor = ({ x, height, points }: any) => {
+  if (x == null) return null
+  const dataY = points?.[0]?.y
+  return (
+    <g>
+      <line x1={x} y1={0} x2={x} y2={height ?? 300}
+        stroke="#f7931a" strokeWidth={1.5} strokeDasharray="4 4" opacity={0.7} />
+      {dataY != null && <circle cx={x} cy={dataY} r={5} fill="#f7931a" stroke="#ffffff" strokeWidth={2} />}
+    </g>
+  )
+}
+
 export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, onDataUpdate }: BTCPriceHistoryProps) {
   const [data, setData] = useState<BTCPriceData[]>([])
   const [fullData, setFullData] = useState<BTCPriceData[]>([]) // Store full dataset for calculators
-  const [timeRange, setTimeRange] = useState<'1D' | '7D' | '30D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
+  const [timeRange, setTimeRange] = useState<'1D' | '7D' | '30D' | '60D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
   const [selectedCurrency, setSelectedCurrency] = useState('USD')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [currentPrice, setCurrentPrice] = useState<number>(0)
-  const [priceChange, setPriceChange] = useState<number>(0)
+  // ponytail: derived — no state, no extra render cycle
   const [lastLiveUpdate, setLastLiveUpdate] = useState<Date | null>(null)
   const [updateStatus, setUpdateStatus] = useState<string>('')
   const [convertedData, setConvertedData] = useState<BTCPriceData[]>([])
@@ -59,40 +103,23 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   // X-axis zoom functionality
   const [left, setLeft] = useState<number>(0)
   const [right, setRight] = useState<number>(0)
+  // Store timestamps (not convertedData indices) so ReferenceArea aligns with chartData
   const [refAreaLeft, setRefAreaLeft] = useState<number | null>(null)
   const [refAreaRight, setRefAreaRight] = useState<number | null>(null)
   const [isSelectingRange, setIsSelectingRange] = useState(false)
-  const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null)
-  const [isHovering, setIsHovering] = useState(false)
+  // ponytail: single state → single render per mousemove (null = not hovering)
+  const [cursorX, setCursorX] = useState<number | null>(null)
   const [isZoomed, setIsZoomed] = useState(false)
-  const [lastPresetRange, setLastPresetRange] = useState<'1D' | '7D' | '30D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
+  const [lastPresetRange, setLastPresetRange] = useState<'1D' | '7D' | '30D' | '60D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
+  // Each entry = state before that zoom was applied; pop to step back one level
+  // data = high-res fetch for that level (null = slice of convertedData)
+  const [zoomStack, setZoomStack] = useState<Array<{ left: number; right: number; data: BTCPriceData[] | null }>>([]);
+  const [currentZoomData, setCurrentZoomData] = useState<BTCPriceData[] | null>(null)
+  const [isZoomLoading, setIsZoomLoading] = useState(false)
+  const [rangeChangeAsDollar, setRangeChangeAsDollar] = useState(false)
 
-  const currencies = useMemo(() => [
-    { code: 'USD', symbol: '$', name: 'US Dollar' },
-    { code: 'EUR', symbol: '€', name: 'Euro' },
-    { code: 'GBP', symbol: '£', name: 'British Pound' },
-    { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
-    { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
-    { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
-    { code: 'CHF', symbol: 'CHF', name: 'Swiss Franc' },
-    { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
-    { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
-    { code: 'BRL', symbol: 'R$', name: 'Brazilian Real' },
-    { code: 'KRW', symbol: '₩', name: 'South Korean Won' },
-    { code: 'RUB', symbol: '₽', name: 'Russian Ruble' },
-    { code: 'MXN', symbol: '$', name: 'Mexican Peso' },
-    { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
-    { code: 'HKD', symbol: 'HK$', name: 'Hong Kong Dollar' },
-    { code: 'NZD', symbol: 'NZ$', name: 'New Zealand Dollar' },
-    { code: 'SEK', symbol: 'kr', name: 'Swedish Krona' },
-    { code: 'NOK', symbol: 'kr', name: 'Norwegian Krone' },
-    { code: 'DKK', symbol: 'kr', name: 'Danish Krone' },
-    { code: 'PLN', symbol: 'zł', name: 'Polish Złoty' }
-  ], [])
-
-  // Memoized currency info to avoid recalculations
-  const selectedCurrencyInfo = useMemo(() => 
-    currencies.find(c => c.code === selectedCurrency), [currencies, selectedCurrency]
+  const selectedCurrencyInfo = useMemo(() =>
+    CURRENCIES.find(c => c.code === selectedCurrency), [selectedCurrency]
   )
 
   // Fetch exchange rates from stored file
@@ -109,7 +136,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       const rateMap: {[key: string]: number} = {}
       
       // Build rate map from stored data
-      for (const currency of currencies) {
+      for (const currency of CURRENCIES) {
         if (data.data[currency.code]) {
           rateMap[currency.code] = data.data[currency.code].value
           console.log(`Rate for ${currency.code}: ${data.data[currency.code].value}`)
@@ -148,7 +175,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       setExchangeRates(defaultRates)
       console.log('Using default exchange rates:', defaultRates)
     }
-  }, [currencies])
+  }, [])
 
   // Convert data to selected currency
   const convertDataToCurrency = useCallback((data: BTCPriceData[], targetCurrency: string) => {
@@ -181,12 +208,17 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       
       console.log(`✅ API returned ${result.data.length} data points for ${range}`)
       
-      // Convert API data to BTCPriceData format
+      // Convert API data to BTCPriceData format — preserve OHLC for tooltip
       const priceData = result.data.map((item: any) => ({
         timestamp: item.timestamp,
         price: item.price,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
         volume: item.volume,
-        marketCap: item.marketCap
+        marketCap: item.marketCap,
+        dataSource: item.dataSource,
       }))
       
       return priceData
@@ -337,189 +369,27 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     }
   }, [fullData, selectedCurrency, selectedCurrencyInfo, onDataUpdate, exchangeRates, convertDataToCurrency])
 
-  // Convert data when currency changes (only when rates are available)
+  // Single effect for currency conversion (was duplicated)
   useEffect(() => {
     if (data.length > 0 && Object.keys(exchangeRates).length > 0) {
-      const converted = convertDataToCurrency(data, selectedCurrency)
-      setConvertedData(converted)
-      
-      // Update current price and price change for the new currency
-      if (converted.length > 0) {
-        const latest = converted[converted.length - 1]
-        const earliest = converted[0]
-        
-        setCurrentPrice(latest.price)
-        setPriceChange(((latest.price - earliest.price) / earliest.price) * 100)
-      }
+      setConvertedData(convertDataToCurrency(data, selectedCurrency))
     }
-  }, [data, selectedCurrency, convertDataToCurrency, exchangeRates])
+  }, [data, selectedCurrency, exchangeRates, convertDataToCurrency])
 
   // Fetch exchange rates on mount
   useEffect(() => {
     fetchExchangeRates()
   }, [fetchExchangeRates])
 
-  // Initial currency conversion when data and rates are available
+  // Escape = one level back, Alt+Escape = all the way out
   useEffect(() => {
-    if (data.length > 0 && Object.keys(exchangeRates).length > 0) {
-      const converted = convertDataToCurrency(data, selectedCurrency)
-      setConvertedData(converted)
-      
-      // Update current price and price change for the new currency
-      if (converted.length > 0) {
-        const latest = converted[converted.length - 1]
-        const earliest = converted[0]
-        
-        setCurrentPrice(latest.price)
-        setPriceChange(((latest.price - earliest.price) / earliest.price) * 100)
-      }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !isZoomed) return
+      e.altKey ? zoomOutAll() : zoomOut()
     }
-  }, [data, exchangeRates, selectedCurrency, convertDataToCurrency])
-
-  // Update price calculations when zoom state changes
-  useEffect(() => {
-    if (convertedData.length > 0 && !isSelectingRange) {
-      // Use filtered data based on current range
-      let filteredData = convertedData
-      
-      // Apply zoom filter if zoomed
-      if (isZoomed && left !== right && left >= 0 && right < convertedData.length) {
-        filteredData = convertedData.slice(left, right + 1)
-      }
-      
-      const latest = filteredData[filteredData.length - 1]
-      const earliest = filteredData[0]
-      
-      setCurrentPrice(latest.price)
-      setPriceChange(((latest.price - earliest.price) / earliest.price) * 100)
-    }
-  }, [convertedData, isZoomed, left, right, isSelectingRange])
-
-  // Calculate Y-axis domain and ticks for better chart visibility
-  const yAxisConfig = useMemo(() => {
-    if (convertedData.length === 0) return { domain: [0, 'auto' as const], ticks: [] }
-    
-    let filteredData = convertedData
-    
-    // Apply zoom filter if zoomed
-    if (isZoomed && left !== right && left >= 0 && right < convertedData.length) {
-      filteredData = convertedData.slice(left, right + 1)
-    }
-    
-    const prices = filteredData.map(d => d.price)
-    const minPrice = Math.min(...prices)
-    const maxPrice = Math.max(...prices)
-    const range = maxPrice - minPrice
-    
-    // Start 5% below the minimum price for better visibility
-    const start = Math.max(0, minPrice - (range * 0.05))
-    
-    // Generate ticks based on range and multiples of 2 for granular display
-    const generateTicks = (min: number, max: number) => {
-      const range = max - min
-      let step: number
-      
-      // Ensure we have a valid range
-      if (range <= 0) {
-        return [min, max]
-      }
-      
-      // Calculate appropriate step size based on range
-      if (range > 100000) {
-        // For large ranges (e.g., $100k to $107k), use smaller steps
-        step = Math.max(1000, Math.pow(2, Math.floor(Math.log2(range / 8))) * 1000)
-      } else if (range > 10000) {
-        step = Math.max(100, Math.pow(2, Math.floor(Math.log2(range / 8))) * 100)
-      } else if (range > 1000) {
-        step = Math.max(10, Math.pow(2, Math.floor(Math.log2(range / 8))) * 10)
-      } else if (range > 100) {
-        step = Math.max(1, Math.pow(2, Math.floor(Math.log2(range / 8))))
-      } else if (range > 10) {
-        step = Math.max(0.1, Math.pow(2, Math.floor(Math.log2(range / 8))) * 0.1)
-      } else if (range > 1) {
-        step = Math.max(0.01, Math.pow(2, Math.floor(Math.log2(range / 8))) * 0.01)
-      } else {
-        step = Math.max(0.001, Math.pow(2, Math.floor(Math.log2(range / 8))) * 0.001)
-      }
-      
-      // Ensure step is not too large
-      if (step > range / 2) {
-        step = range / 4
-      }
-      
-      const ticks = []
-      let current = Math.ceil(min / step) * step
-      
-      // Generate ticks with better granularity for smaller ranges
-      while (current <= max && ticks.length < 12) {
-        ticks.push(current)
-        current += step
-      }
-      
-      // If we don't have enough ticks, add more
-      if (ticks.length < 3) {
-        const simpleStep = range / 4
-        ticks.length = 0
-        for (let i = 0; i <= 4; i++) {
-          ticks.push(min + (simpleStep * i))
-        }
-      }
-      
-      return ticks
-    }
-    
-    const ticks = generateTicks(start, maxPrice)
-    
-    // Debug logging
-    console.log('Y-axis config:', { minPrice, maxPrice, range, start, ticks })
-    
-    // Fallback to automatic ticks if our custom ticks are empty or invalid
-    const finalTicks = ticks && ticks.length > 0 ? ticks : undefined
-    
-    return { domain: [start, 'auto'] as [number, 'auto'], ticks: finalTicks }
-  }, [convertedData, isZoomed, left, right])
-
-  // Custom cursor component with lines attached to the data point
-  const CustomCursor = ({ x, y, width, height }: any) => {
-    if (!x || !y) return null
-    
-    return (
-      <g>
-        {/* Vertical line - from top to data point */}
-        <line
-          x1={x}
-          y1={0}
-          x2={x}
-          y2={y}
-          stroke="#f7931a"
-          strokeWidth={2}
-          strokeDasharray="3 3"
-          opacity={0.8}
-        />
-        {/* Horizontal line - from left to data point */}
-        <line
-          x1={0}
-          y1={y}
-          x2={x}
-          y2={y}
-          stroke="#f7931a"
-          strokeWidth={2}
-          strokeDasharray="3 3"
-          opacity={0.8}
-        />
-        {/* Data point circle - enhanced visibility */}
-        <circle
-          cx={x}
-          cy={y}
-          r={6}
-          fill="#f7931a"
-          stroke="#ffffff"
-          strokeWidth={2}
-          opacity={1}
-        />
-      </g>
-    )
-  }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isZoomed, zoomStack.length])
 
   // Use the independent tooltip component
   const renderTooltipContent = useCallback(({ active, payload, label }: any) => {
@@ -547,143 +417,264 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   }, [selectedCurrency, selectedCurrencyInfo, data, convertedData])
 
   // Create chart data without markers
+  // ponytail: O(1) timestamp lookup replaces O(n) findIndex on every mousemove
+  const timestampToIndex = useMemo(() => {
+    const map = new Map<number, number>()
+    convertedData.forEach((item, i) => map.set(item.timestamp, i))
+    return map
+  }, [convertedData])
+
   const chartData = useMemo(() => {
     if (convertedData.length === 0) return []
-    
-    let filteredData = convertedData
-    
-    // Apply zoom filter if zoomed
-    if (isZoomed && left !== right && left >= 0 && right < convertedData.length) {
+
+    let filteredData: BTCPriceData[]
+
+    if (isZoomed && currentZoomData) {
+      // High-res data fetched for this zoom level
+      filteredData = currentZoomData
+    } else if (isZoomed && left !== right && left >= 0 && right < convertedData.length) {
+      // Fallback: slice of base data (low-res)
       filteredData = convertedData.slice(left, right + 1)
+    } else {
+      filteredData = convertedData
     }
-    
-    const result = filteredData.map((item) => {
-      return {
-        ...item,
-        showDot: false
+
+    const MAX_POINTS = 500
+    if (filteredData.length > MAX_POINTS) {
+      const step = Math.ceil(filteredData.length / MAX_POINTS)
+      filteredData = filteredData.filter((_, i) => i % step === 0 || i === filteredData.length - 1)
+    }
+
+    return filteredData.map(item => ({ ...item, showDot: false }))
+  }, [convertedData, isZoomed, left, right, currentZoomData])
+
+  // Derived — no state, no extra render cycle
+  const currentPrice = useMemo(() =>
+    chartData.length ? chartData[chartData.length - 1].price : 0
+  , [chartData])
+
+  const priceChange = useMemo(() => {
+    if (chartData.length < 2) return 0
+    const first = chartData[0].price
+    const last = chartData[chartData.length - 1].price
+    return ((last - first) / first) * 100
+  }, [chartData])
+
+  const yAxisConfig = useMemo(() => {
+    if (chartData.length === 0) return { domain: [0, 'auto' as const], ticks: [] }
+    let minPrice = Infinity, maxPrice = -Infinity
+    for (const d of chartData) {
+      if (d.price < minPrice) minPrice = d.price
+      if (d.price > maxPrice) maxPrice = d.price
+    }
+    const range = maxPrice - minPrice
+    const start = Math.max(0, minPrice - (range * 0.05))
+    const generateTicks = (min: number, max: number) => {
+      const r = max - min
+      if (r <= 0) return [min, max]
+      let step: number
+      if (r > 100000) step = Math.max(1000, Math.pow(2, Math.floor(Math.log2(r / 8))) * 1000)
+      else if (r > 10000) step = Math.max(100, Math.pow(2, Math.floor(Math.log2(r / 8))) * 100)
+      else if (r > 1000) step = Math.max(10, Math.pow(2, Math.floor(Math.log2(r / 8))) * 10)
+      else if (r > 100) step = Math.max(1, Math.pow(2, Math.floor(Math.log2(r / 8))))
+      else if (r > 10) step = Math.max(0.1, Math.pow(2, Math.floor(Math.log2(r / 8))) * 0.1)
+      else if (r > 1) step = Math.max(0.01, Math.pow(2, Math.floor(Math.log2(r / 8))) * 0.01)
+      else step = Math.max(0.001, Math.pow(2, Math.floor(Math.log2(r / 8))) * 0.001)
+      if (step > r / 2) step = r / 4
+      const ticks = []
+      let current = Math.ceil(min / step) * step
+      while (current <= max && ticks.length < 12) { ticks.push(current); current += step }
+      if (ticks.length < 3) {
+        const s = r / 4; ticks.length = 0
+        for (let i = 0; i <= 4; i++) ticks.push(min + s * i)
       }
-    })
-    
-    // Debug logging
-    if (result.length > 0) {
-      console.log('Chart data sample:', result.slice(0, 3))
-      console.log('Price range:', Math.min(...result.map(d => d.price)), 'to', Math.max(...result.map(d => d.price)))
+      return ticks
     }
-    
-    return result
-  }, [convertedData, isZoomed, left, right])
+    const ticks = generateTicks(start, maxPrice)
+    return { domain: [start, 'auto'] as [number, 'auto'], ticks: ticks.length > 0 ? ticks : undefined }
+  }, [chartData])
+
+  const xAxisTicks = useMemo(() => {
+    if (chartData.length === 0) return undefined
+
+    // Sample directly from chartData — tick values always match actual data points
+    const every = (step: number) =>
+      chartData.filter((_, i) => i % step === 0 || i === chartData.length - 1).map(d => d.timestamp)
+
+    // One tick per calendar day (first data point of each new day)
+    const perDay = () => {
+      const seen = new Set<string>()
+      const ticks: number[] = []
+      for (const d of chartData) {
+        const day = new Date(d.timestamp).toLocaleDateString('en-CA')
+        if (!seen.has(day)) { seen.add(day); ticks.push(d.timestamp) }
+      }
+      return ticks
+    }
+
+    // N evenly distributed ticks from the data array
+    const evenly = (n: number) => {
+      if (chartData.length <= n) return chartData.map(d => d.timestamp)
+      const step = Math.floor((chartData.length - 1) / (n - 1))
+      return Array.from({ length: n }, (_, i) => chartData[Math.min(i * step, chartData.length - 1)].timestamp)
+    }
+
+    if (isZoomed && currentZoomData?.length) {
+      const ms = currentZoomData[currentZoomData.length - 1].timestamp - currentZoomData[0].timestamp
+      const hours = ms / 3_600_000
+      if (hours <= 24)  return evenly(12)
+      if (hours <= 72)  return evenly(12)
+      if (hours <= 168) return evenly(14)
+      if (hours <= 720) return perDay()
+      return evenly(8)
+    }
+
+    if (timeRange === '1D')  return every(12)   // 288 pts / 12 ≈ 24 ticks (one per ~hour)
+    if (timeRange === '7D')  return every(7)    // 168 pts / 7 = 24 ticks (one per ~6h)
+    if (timeRange === '30D') return every(2)    // ~30 pts / 2 = 15 ticks (one per 2 days)
+    if (timeRange === '60D') return perDay()    // one per day (~60 ticks)
+    if (timeRange === '90D') return perDay()    // one per day (~90 ticks)
+    return evenly(8)                            // 6mo, 1Y, 5Y, 10Y, ALL
+  }, [timeRange, chartData, isZoomed, currentZoomData])
+
+  // First tick of each calendar day — used to show date label instead of time
+  const dayStartTicks = useMemo(() => {
+    if (!xAxisTicks) return new Set<number>()
+    const set = new Set<number>()
+    let lastDay = ''
+    for (const ts of xAxisTicks) {
+      const day = new Date(ts).toLocaleDateString('en-CA')
+      if (day !== lastDay) { set.add(ts); lastDay = day }
+    }
+    return set
+  }, [xAxisTicks])
+
+  // Which ticks are the first of their month — used for 30D/60D month name labels
+  const monthStartTicks = useMemo(() => {
+    if (!xAxisTicks || (timeRange !== '30D' && timeRange !== '60D')) return new Set<number>()
+    const set = new Set<number>()
+    let lastMonth = -1
+    for (const ts of xAxisTicks) {
+      const m = new Date(ts).getMonth()
+      if (m !== lastMonth) { set.add(ts); lastMonth = m }
+    }
+    return set
+  }, [xAxisTicks, timeRange])
 
   const formatXAxisTick = useCallback((tickItem: any) => {
     const date = new Date(tickItem)
     
-    // For zoomed view, show more detailed dates based on zoom range
-    if (isZoomed && left !== right) {
-      const daysDiff = Math.abs(right - left)
-      if (daysDiff <= 7) {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      } else if (daysDiff <= 30) {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      } else if (daysDiff <= 90) {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      } else {
-        return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-      }
+    // Custom zoom: format based on window duration
+    if (isZoomed && currentZoomData?.length) {
+      const ms = currentZoomData[currentZoomData.length - 1].timestamp - currentZoomData[0].timestamp
+      const hours = ms / 3_600_000
+      if (hours <= 24)
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      if (hours <= 168)
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+               date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     }
     
-    // For normal view, use time range based formatting
-    if (timeRange === '1D') {
+    if (timeRange === '1D')
       return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-    } else if (timeRange === '7D' || timeRange === '30D') {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    } else if (timeRange === '90D') {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    } else if (timeRange === '1Y') {
-      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-    } else if (timeRange === '5Y' || timeRange === '10Y') {
-      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
-    } else {
-      // For ALL time range, show more detailed dates
-      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    // Sub-daily ranges: first tick of each day = date label, others = time
+    if (timeRange === '7D' || timeRange === '30D') {
+      if (dayStartTicks.has(tickItem))
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
     }
-  }, [timeRange, isZoomed, left, right])
+    if (timeRange === '90D')
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    if (timeRange === '1Y')
+      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+    if (timeRange === '5Y' || timeRange === '10Y')
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  }, [timeRange, isZoomed, left, right, currentZoomData, monthStartTicks, dayStartTicks])
 
   // X-axis zoom functions
-  const zoom = () => {
+  const zoom = async () => {
     if (refAreaLeft === null || refAreaRight === null || refAreaLeft === refAreaRight) {
-      setRefAreaLeft(null)
-      setRefAreaRight(null)
-      return
+      setRefAreaLeft(null); setRefAreaRight(null); return
+    }
+    const startTs = Math.min(refAreaLeft, refAreaRight)
+    const endTs = Math.max(refAreaLeft, refAreaRight)
+    const startIdx = timestampToIndex.get(startTs) ?? 0
+    const endIdx = timestampToIndex.get(endTs) ?? convertedData.length - 1
+    if (startIdx === endIdx || (startIdx === left && endIdx === right)) {
+      setRefAreaLeft(null); setRefAreaRight(null); return
     }
 
-    const startIndex = Math.min(refAreaLeft, refAreaRight)
-    const endIndex = Math.max(refAreaLeft, refAreaRight)
-    
-    // Ensure we have valid indices within the data range
-    if (startIndex >= 0 && endIndex < convertedData.length && startIndex !== endIndex) {
-      setLeft(startIndex)
-      setRight(endIndex)
-      setIsZoomed(true)
-      // Store current preset range before zooming to custom
-      setLastPresetRange(timeRange)
-    }
-    
-    setRefAreaLeft(null)
-    setRefAreaRight(null)
+    if (!isZoomed) setLastPresetRange(timeRange)
+    setRefAreaLeft(null); setRefAreaRight(null)
+
+    // Push current state (including current high-res data) onto stack
+    setZoomStack(prev => [...prev, { left, right, data: currentZoomData }])
+    setLeft(startIdx); setRight(endIdx)
+    setIsZoomed(true)
+
+    // Fetch high-res data for this exact window
+    setIsZoomLoading(true)
+    try {
+      const fromSec = Math.floor(startTs / 1000)
+      const toSec = Math.floor(endTs / 1000)
+      const res = await fetch(`/api/btc-chart-data?from=${fromSec}&to=${toSec}`)
+      const json = await res.json()
+      if (json.success && json.data?.length) {
+        setCurrentZoomData(json.data)
+      }
+    } catch { /* fall back to sliced data */ }
+    finally { setIsZoomLoading(false) }
   }
 
+  // Step back one zoom level, restoring that level's high-res data
   const zoomOut = () => {
-    setLeft(0)
-    setRight(0)
-    setRefAreaLeft(null)
-    setRefAreaRight(null)
+    setZoomStack(prev => {
+      const restored = prev[prev.length - 1] ?? { left: 0, right: 0, data: null }
+      const next = prev.slice(0, -1)
+      setLeft(restored.left); setRight(restored.right)
+      setCurrentZoomData(restored.data)
+      setIsZoomed(next.length > 0)
+      if (next.length === 0) setTimeRange(lastPresetRange)
+      return next
+    })
+    setRefAreaLeft(null); setRefAreaRight(null)
+  }
+
+  // Jump all the way back to the original range
+  const zoomOutAll = () => {
+    setZoomStack([])
+    setLeft(0); setRight(0)
+    setCurrentZoomData(null)
     setIsZoomed(false)
-    // Return to the last preset range
     setTimeRange(lastPresetRange)
+    setRefAreaLeft(null); setRefAreaRight(null)
   }
 
   const handleMouseDown = (e: any) => {
-    if (!e || e.activeLabel === undefined) return
-    // Find the index of the data point closest to the clicked position
-    const index = convertedData.findIndex(item => item.timestamp === e.activeLabel)
-    if (index !== -1) {
-      setIsSelectingRange(true)
-      setRefAreaLeft(index)
-      setRefAreaRight(index) // Initialize right to same position for smoother selection
-      console.log('Mouse down at index:', index)
-    }
+    if (!e?.activeLabel) return
+    setIsSelectingRange(true)
+    setRefAreaLeft(e.activeLabel)
+    setRefAreaRight(e.activeLabel)
   }
 
   const handleMouseMove = (e: any) => {
     if (!e) return
     
-    // Always update cursor position for visual feedback
-    if (e.activeCoordinate) {
-      setCursorPosition({ x: e.activeCoordinate.x, y: e.activeCoordinate.y })
-      setIsHovering(true)
-    }
+    if (e.activeLabel != null) setCursorX(e.activeLabel)
     
-    // Handle range selection only if we have an active label
-    if (refAreaLeft !== null && e.activeLabel !== undefined) {
-      const index = convertedData.findIndex(item => item.timestamp === e.activeLabel)
-      if (index !== -1 && index !== refAreaRight) {
-        setRefAreaRight(index)
-        console.log('Mouse move - selection range:', refAreaLeft, 'to', index)
-      }
+    if (refAreaLeft !== null && e.activeLabel != null && e.activeLabel !== refAreaRight) {
+      setRefAreaRight(e.activeLabel)
     }
   }
 
 
 
-  const handleChartMouseLeave = () => {
-    setIsHovering(false)
-    setCursorPosition(null)
-  }
+  const handleChartMouseLeave = () => setCursorX(null)
 
   const handleChartMouseEnter = (e: any) => {
-    setIsHovering(true)
-    if (e && e.activeCoordinate) {
-      setCursorPosition({ x: e.activeCoordinate.x, y: e.activeCoordinate.y })
-    }
+    if (e?.activeLabel != null) setCursorX(e.activeLabel)
   }
 
   const handleMouseUp = () => {
@@ -744,6 +735,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     <SelectItem value="1D" className="text-white hover:bg-gray-700">1D</SelectItem>
                     <SelectItem value="7D" className="text-white hover:bg-gray-700">7D</SelectItem>
                     <SelectItem value="30D" className="text-white hover:bg-gray-700">30D</SelectItem>
+                    <SelectItem value="60D" className="text-white hover:bg-gray-700">60D</SelectItem>
                     <SelectItem value="90D" className="text-white hover:bg-gray-700">90D</SelectItem>
                     <SelectItem value="6mo" className="text-white hover:bg-gray-700">6mo</SelectItem>
                     <SelectItem value="1Y" className="text-white hover:bg-gray-700">1Y</SelectItem>
@@ -759,38 +751,72 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                 </Select>
               </div>
 
-              {/* Currency Selector - Compact */}
+              {/* Currency Selector */}
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-gray-400">Currency:</Label>
                 <Select value={selectedCurrency} onValueChange={(value: any) => setSelectedCurrency(value)}>
-                  <SelectTrigger className="h-8 w-20 border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors">
+                  <SelectTrigger className="h-8 w-24 border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors gap-1">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.code} value={currency.code} className="text-white hover:bg-gray-700">
-                        {currency.code}
-                      </SelectItem>
+                  <SelectContent className="bg-gray-900 border-gray-700 max-h-72 w-52">
+                    {CURRENCIES.map((currency) => (
+                      <SelectPrimitive.Item
+                        key={currency.code}
+                        value={currency.code}
+                        className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-3 text-sm outline-none text-white data-[highlighted]:bg-gray-700"
+                      >
+                        <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                          <SelectPrimitive.ItemIndicator>
+                            <Check className="h-3.5 w-3.5 text-orange-400" />
+                          </SelectPrimitive.ItemIndicator>
+                        </span>
+                        {/* Only flag+code goes in ItemText → this is what SelectValue shows in the trigger */}
+                        <SelectPrimitive.ItemText>
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-base leading-none">{currency.flag}</span>
+                            <span className="font-mono font-semibold text-sm">{currency.code}</span>
+                          </span>
+                        </SelectPrimitive.ItemText>
+                        {/* Name is outside ItemText → dropdown only */}
+                        <span className="ml-2 text-gray-400 text-xs">{currency.name}</span>
+                      </SelectPrimitive.Item>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Zoom Reset Button - Compact */}
-              {isZoomed && (
+            </div>
+            
+            {/* Right: Reset + Refresh */}
+            <div className="flex items-center gap-2">
+            {isZoomed && (
+              <div className="flex items-center gap-1">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={zoomOut}
-                  className="h-8 px-2 border-orange-500 bg-orange-600/20 text-orange-300 hover:bg-orange-600/30 transition-colors"
-                  title={`Reset to ${lastPresetRange}`}
+                  className="h-8 px-3 gap-1.5 border-orange-500 bg-orange-600/20 text-orange-300 hover:bg-orange-600/40 transition-colors font-medium"
+                  title="Step back one zoom level (Esc)"
                 >
                   <ZoomOut className="h-3 w-3" />
+                  Reset
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-500/30 text-orange-200 text-[10px] font-bold">
+                    {zoomStack.length}
+                  </span>
                 </Button>
-              )}
-            </div>
-            
-            {/* Right: Refresh Button */}
+                {zoomStack.length > 1 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={zoomOutAll}
+                    className="h-8 px-2 text-orange-400/70 hover:text-orange-300 hover:bg-orange-600/20 transition-colors text-xs"
+                    title="Reset to start (Alt+Esc)"
+                  >
+                    ×{zoomStack.length}
+                  </Button>
+                )}
+              </div>
+            )}
             <Button
               size="sm"
               onClick={async () => {
@@ -841,61 +867,80 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
               <RefreshCw className="h-3 w-3 mr-1" />
               <span className="text-xs">Refresh</span>
             </Button>
+            </div>
           </div>
           
-          {/* Prominent Stats Container */}
+          {/* Stats Card */}
           {convertedData.length > 0 && (() => {
-            // Use filtered data based on current range
             let filteredData = convertedData
-            
-            // Apply zoom filter if zoomed
-            if (isZoomed && left !== right && left >= 0 && right < convertedData.length) {
+            if (isZoomed && currentZoomData?.length) filteredData = currentZoomData
+            else if (isZoomed && left !== right && left >= 0 && right < convertedData.length)
               filteredData = convertedData.slice(left, right + 1)
-            }
-            
+
             const startingPrice = filteredData[0].price
-            const endingPrice = filteredData[filteredData.length - 1].price
-            const rangePriceChange = ((endingPrice - startingPrice) / startingPrice) * 100
-            
+            // Use live price for "current" when available, otherwise chart end
+            const livePrice = realTimePriceData?.price
+            const displayPrice = livePrice ?? filteredData[filteredData.length - 1].price
+            const rangeChange = ((displayPrice - startingPrice) / startingPrice) * 100
+            const positive = rangeChange >= 0
+            const sym = selectedCurrencyInfo?.symbol ?? '$'
+            const startDate = new Date(filteredData[0].timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+            const endDate = new Date(filteredData[filteredData.length - 1].timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+
+            const rangeDays = Math.round((filteredData[filteredData.length - 1].timestamp - filteredData[0].timestamp) / 86_400_000)
+            const rangeAbsolute = displayPrice - startingPrice
+
             return (
-              <div className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 rounded-xl border border-gray-600/50 px-6 py-4 backdrop-blur-sm shadow-xl">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                  <div className="text-center">
-                    <div className="text-xs text-gray-400 mb-1 font-medium">Starting Price</div>
-                    <div className="text-lg font-bold text-purple-400">
-                      {formatPrice(startingPrice, selectedCurrencyInfo?.symbol)}
-                    </div>
+              <div className="flex items-stretch rounded-xl overflow-hidden border border-white/[0.06] shadow-2xl">
+
+                {/* 1 — Period Start */}
+                <div className="flex-1 px-5 py-4 border-r border-white/[0.05] bg-gray-900/50">
+                  <div className="text-[10px] uppercase tracking-widest text-purple-400/50 mb-2 font-semibold">Period Start</div>
+                  <div className="text-xl font-bold text-purple-300 tabular-nums">{formatPrice(startingPrice, sym)}</div>
+                  <div className="text-[10px] text-gray-500 mt-1">{startDate}</div>
+                </div>
+
+                {/* 2 — Current Price */}
+                <div className="flex-1 bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent px-5 py-4 border-r border-white/[0.05]">
+                  <div className="text-[10px] uppercase tracking-widest text-orange-400/60 mb-2 font-semibold">Current Price</div>
+                  <div className="text-xl font-bold text-white tabular-nums">{formatPrice(displayPrice, sym)}</div>
+                  {livePrice
+                    ? <div className="flex items-center gap-1 mt-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" /><span className="text-[10px] text-green-400/70 font-medium">Live</span></div>
+                    : <div className="text-[10px] text-gray-500 mt-1">{endDate}</div>
+                  }
+                </div>
+
+                {/* 3 — Range Change (togglable % / $) */}
+                <div className={`flex-1 px-5 py-4 border-r border-white/[0.05] bg-gradient-to-br ${positive ? 'from-green-500/10 via-emerald-500/5' : 'from-red-500/10 via-rose-500/5'} to-transparent`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-[10px] uppercase tracking-widest text-gray-400/60 font-semibold">Range Change</div>
+                    <button
+                      onClick={() => setRangeChangeAsDollar(v => !v)}
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors ${rangeChangeAsDollar ? 'border-orange-500/50 text-orange-400 bg-orange-500/10' : 'border-gray-600/50 text-gray-400 bg-gray-800/50 hover:border-gray-500'}`}
+                    >
+                      {rangeChangeAsDollar ? sym : '%'}
+                    </button>
                   </div>
-                  <div className="text-center">
-                    <div className="text-xs text-gray-400 mb-1 font-medium">Current Price</div>
-                    <div className="text-lg font-bold text-orange-400">
-                      {realTimePriceData ? (
-                        formatPrice(realTimePriceData.price, selectedCurrencyInfo?.symbol)
-                      ) : (
-                        formatPrice(endingPrice, selectedCurrencyInfo?.symbol)
-                      )}
-                    </div>
+                  <div className={`text-xl font-bold tabular-nums ${positive ? 'text-green-400' : 'text-red-400'}`}>
+                    {rangeChangeAsDollar
+                      ? `${positive ? '+' : ''}${formatPrice(rangeAbsolute, sym)}`
+                      : `${positive ? '+' : ''}${rangeChange.toFixed(2)}%`
+                    }
                   </div>
-                  <div className="text-center">
-                    <div className="text-xs text-gray-400 mb-1 font-medium">Change</div>
-                    <div className={`text-lg font-bold ${
-                      realTimePriceData ? 
-                        ((realTimePriceData.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400') :
-                        (rangePriceChange >= 0 ? 'text-green-400' : 'text-red-400')
-                    }`}>
-                      {realTimePriceData ? (
-                        `${(realTimePriceData.price_change_percentage_24h ?? 0) >= 0 ? '+' : ''}${(realTimePriceData.price_change_percentage_24h ?? 0).toFixed(2)}%`
-                      ) : (
-                        `${rangePriceChange >= 0 ? '+' : ''}${rangePriceChange.toFixed(2)}%`
-                      )}
-                    </div>
+                  <div className="text-[10px] text-gray-500 mt-1">over {rangeDays}d</div>
+                </div>
+
+                {/* 4 — Date Range */}
+                <div className="flex-1 px-5 py-4 bg-gray-900/50">
+                  <div className="text-[10px] uppercase tracking-widest text-gray-400/50 mb-2 font-semibold">Date Range</div>
+                  <div className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+                    {startDate}
+                    <span className="text-gray-600 mx-0.5">→</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                    {endDate}
                   </div>
-                  <div className="text-center">
-                    <div className="text-xs text-gray-400 mb-1 font-medium">Date Range</div>
-                    <div className="text-sm font-medium text-white">
-                      {new Date(convertedData[0].timestamp).toLocaleDateString()} - {new Date(convertedData[convertedData.length - 1].timestamp).toLocaleDateString()}
-                    </div>
-                  </div>
+                  <div className="text-[10px] text-gray-500 mt-1">{rangeDays} days total</div>
                 </div>
               </div>
             )
@@ -904,6 +949,11 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
         
         {/* Chart Container - Maximized Height */}
         <div className="w-full h-[calc(100vh-280px)] sm:h-[calc(100vh-300px)] lg:h-[calc(100vh-320px)] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-1 sm:pb-1 lg:pb-2 relative mb-2">
+          {isZoomLoading && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-900/40 rounded-lg backdrop-blur-sm">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-orange-500"></div>
@@ -920,7 +970,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart 
                 data={chartData}
-                margin={{ top: 5, right: 1, left: -28, bottom: 5 }}
+                margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
@@ -949,15 +999,16 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="1 1" stroke="#374151" opacity={0.2} vertical={false} />
-                <XAxis 
-                  dataKey="timestamp" 
+                <XAxis
+                  dataKey="timestamp"
+                  ticks={xAxisTicks}
                   tickFormatter={formatXAxisTick}
                   stroke="#9CA3AF"
                   fontSize={10}
                   tickLine={false}
                   axisLine={false}
                   tickMargin={6}
-                  minTickGap={24}
+                  minTickGap={['7D','30D','60D','90D'].includes(timeRange) ? 0 : 16}
                 />
                 <YAxis 
                   stroke="#9CA3AF"
@@ -979,7 +1030,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                 {/* Selection cursor - shows during drag */}
                 {refAreaLeft !== null && (
                   <ReferenceLine
-                    x={convertedData[refAreaLeft]?.timestamp}
+                    x={refAreaLeft}
                     stroke="#f7931a"
                     strokeWidth={2}
                     strokeDasharray="3 3"
@@ -1005,6 +1056,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                 )}
                 <Area
                   dataKey="price"
+                  isAnimationActive={false}
                   type={timeRange === '1D' || timeRange === '7D' || timeRange === '30D' ? 'monotone' : 'natural'}
                   fill="url(#fillBTCPrice)"
                   stroke="#f7931a"
@@ -1042,8 +1094,8 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                 />
                 {refAreaLeft !== null && refAreaRight !== null ? (
                   <ReferenceArea
-                    x1={convertedData[refAreaLeft]?.timestamp}
-                    x2={convertedData[refAreaRight]?.timestamp}
+                    x1={refAreaLeft}
+                    x2={refAreaRight}
                     stroke="#f7931a"
                     strokeOpacity={0.6}
                     strokeWidth={2}
@@ -1051,16 +1103,8 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     fillOpacity={0.2}
                   />
                 ) : null}
-                {/* Hover cursor - shows when mouse is over chart */}
-                {isHovering && cursorPosition && (
-                  <ReferenceLine
-                    x={cursorPosition.x}
-                    stroke="#f7931a"
-                    strokeWidth={3}
-                    strokeDasharray="5 5"
-                    opacity={0.9}
-                    isFront={true}
-                  />
+                {cursorX != null && (
+                  <ReferenceLine x={cursorX} stroke="#f7931a" strokeWidth={1.5} strokeDasharray="4 4" opacity={0.8} isFront={true} />
                 )}
               </AreaChart>
             </ResponsiveContainer>
@@ -1108,9 +1152,11 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     Selecting Range
                   </div>
                   {(() => {
-                    const startDate = new Date(convertedData[refAreaLeft]?.timestamp || 0)
-                    const endDate = new Date(convertedData[refAreaRight]?.timestamp || 0)
-                    const daysDiff = Math.abs(refAreaRight - refAreaLeft)
+                    const startTs = Math.min(refAreaLeft!, refAreaRight!)
+                    const endTs = Math.max(refAreaLeft!, refAreaRight!)
+                    const startDate = new Date(startTs)
+                    const endDate = new Date(endTs)
+                    const daysDiff = Math.round((endTs - startTs) / 86400000)
                     return (
                       <>
                         <div className="text-white font-semibold text-xs select-none">
