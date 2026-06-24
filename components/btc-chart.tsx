@@ -135,6 +135,17 @@ export const BTCChart = React.memo(function BTCChart({ outputs, inputs }: BTCCha
     )
   }, [])
 
+  // ponytail: SVG cursor bypasses ChartContainer's stroke-border override on recharts-tooltip-cursor
+  const CrosshairCursor = ({ x, height }: any) => {
+    if (!x) return null
+    return (
+      <line
+        x1={x} y1={0} x2={x} y2={height}
+        stroke="#6b7280" strokeWidth={1} strokeDasharray="4 4" opacity={0.8}
+      />
+    )
+  }
+
   // Loading fallback for charts
   const ChartLoadingFallback = () => (
     <div className="h-[300px] flex items-center justify-center bg-gray-800/50 rounded-lg">
@@ -178,10 +189,10 @@ export const BTCChart = React.memo(function BTCChart({ outputs, inputs }: BTCCha
                   width={80}
                   label={{ value: 'Value ($)', angle: -90, position: 'insideLeft', fill: '#9CA3AF', fontSize: 12 }}
                 />
-                <LazyChartTooltip content={renderTooltipContent} />
+                <LazyChartTooltip content={renderTooltipContent} cursor={<CrosshairCursor />} />
                 <LazyChartLegend content={<LazyChartLegendContent />} />
-                <Area 
-                  type="monotone" 
+                <Area
+                  type="monotone"
                   dataKey="btcValue" 
                   stackId="1" 
                   stroke="#10b981" 
@@ -238,10 +249,10 @@ export const BTCChart = React.memo(function BTCChart({ outputs, inputs }: BTCCha
                   width={60}
                   label={{ value: 'BTC Price ($)', angle: -90, position: 'insideLeft', fill: '#9CA3AF', fontSize: 12 }}
                 />
-                <LazyChartTooltip content={renderTooltipContent} />
+                <LazyChartTooltip content={renderTooltipContent} cursor={<CrosshairCursor />} />
                 <LazyChartLegend content={<LazyChartLegendContent />} />
-                <Line 
-                  type="monotone" 
+                <Line
+                  type="monotone"
                   dataKey="btcPrice" 
                   stroke="#f59e0b" 
                   strokeWidth={4}
@@ -289,10 +300,10 @@ export const BTCChart = React.memo(function BTCChart({ outputs, inputs }: BTCCha
                   width={80}
                   label={{ value: 'BTC Holdings', angle: -90, position: 'insideLeft', fill: '#9CA3AF', fontSize: 12 }}
                 />
-                <LazyChartTooltip content={renderTooltipContent} />
+                <LazyChartTooltip content={renderTooltipContent} cursor={<CrosshairCursor />} />
                 <LazyChartLegend content={<LazyChartLegendContent />} />
-                <Line 
-                  type="monotone" 
+                <Line
+                  type="monotone"
                   dataKey="btcHoldings" 
                   stroke="#8b5cf6" 
                   strokeWidth={4}
