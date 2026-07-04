@@ -4,9 +4,12 @@
  * Runs twice daily at 7 AM and 7 PM UTC
  */
 
-import { promises as fs } from 'fs'
 import path from 'path'
 import { logInfo, logWarn, logError } from './logger'
+import { readStoredCSV, writeStoredCSV } from './csv-storage'
+
+const REALTIME_CSV_PATHNAME = 'BTC_Realtime_Data.csv'
+const HISTORICAL_CSV_PATHNAME = 'BTC Price History copy.csv'
 
 export interface HistoricalDataRow {
   Start: string
@@ -182,9 +185,9 @@ function calculateOHLCV(
  */
 async function readRealtimeCSV(): Promise<RealtimeDataRow[]> {
   const csvPath = path.join(process.cwd(), 'public', 'BTC_Realtime_Data.csv')
-  
+
   try {
-    const content = await fs.readFile(csvPath, 'utf-8')
+    const content = await readStoredCSV(REALTIME_CSV_PATHNAME, csvPath)
     const lines = content.trim().split('\n')
     
     if (lines.length <= 1) {
@@ -223,9 +226,9 @@ async function readRealtimeCSV(): Promise<RealtimeDataRow[]> {
  */
 async function readHistoricalCSV(): Promise<HistoricalDataRow[]> {
   const csvPath = path.join(process.cwd(), 'public', 'BTC Price History copy.csv')
-  
+
   try {
-    const content = await fs.readFile(csvPath, 'utf-8')
+    const content = await readStoredCSV(HISTORICAL_CSV_PATHNAME, csvPath)
     const lines = content.trim().split('\n')
     
     if (lines.length <= 1) {
@@ -274,8 +277,8 @@ async function writeHistoricalCSV(data: HistoricalDataRow[]): Promise<void> {
     })
 
     const content = [header, ...rows].join('\n') + '\n'
-    await fs.writeFile(csvPath, content, 'utf-8')
-    
+    await writeStoredCSV(HISTORICAL_CSV_PATHNAME, content, csvPath)
+
     await logInfo('Consolidator', `Wrote ${data.length} rows to historical CSV`)
   } catch (error) {
     await logError('Consolidator', 'Error writing historical CSV', error)
@@ -314,8 +317,8 @@ async function trimRealtimeCSV(data: RealtimeDataRow[]): Promise<void> {
     )
 
     const content = [header, ...rows].join('\n') + '\n'
-    await fs.writeFile(csvPath, content, 'utf-8')
-    
+    await writeStoredCSV(REALTIME_CSV_PATHNAME, content, csvPath)
+
     await logInfo('Consolidator', `Trimmed realtime CSV to ${trimmedData.length} entries`)
   } catch (error) {
     await logWarn('Consolidator', 'Error trimming realtime CSV', error)

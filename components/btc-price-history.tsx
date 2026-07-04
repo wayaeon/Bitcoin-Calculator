@@ -18,7 +18,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { AreaChart, Area } from 'recharts'
 import { convertCurrency, getSupportedCurrencies } from '@/lib/currency-api'
-import { formatYAxisValue, formatPrice } from '@/lib/btc-calculator'
+import { formatPrice } from '@/lib/btc-calculator'
 import { BTCChartTooltipEnhanced } from '@/components/btc-chart-tooltip'
 import { useBTCPrice } from '@/hooks/use-btc-price'
 
@@ -64,19 +64,6 @@ const CURRENCIES = [
   { code: 'PLN', symbol: 'zł',   name: 'Polish Złoty',       flag: '🇵🇱' },
 ]
 
-// Outside component — never redefined on render
-const CustomCursor = ({ x, height, points }: any) => {
-  if (x == null) return null
-  const dataY = points?.[0]?.y
-  return (
-    <g>
-      <line x1={x} y1={0} x2={x} y2={height ?? 300}
-        stroke="#f7931a" strokeWidth={1.5} strokeDasharray="4 4" opacity={0.7} />
-      {dataY != null && <circle cx={x} cy={dataY} r={5} fill="#f7931a" stroke="#ffffff" strokeWidth={2} />}
-    </g>
-  )
-}
-
 export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, onDataUpdate }: BTCPriceHistoryProps) {
   const [data, setData] = useState<BTCPriceData[]>([])
   const [fullData, setFullData] = useState<BTCPriceData[]>([]) // Store full dataset for calculators
@@ -107,8 +94,6 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   const [refAreaLeft, setRefAreaLeft] = useState<number | null>(null)
   const [refAreaRight, setRefAreaRight] = useState<number | null>(null)
   const [isSelectingRange, setIsSelectingRange] = useState(false)
-  // ponytail: single state → single render per mousemove (null = not hovering)
-  const [cursorX, setCursorX] = useState<number | null>(null)
   const [isZoomed, setIsZoomed] = useState(false)
   const [lastPresetRange, setLastPresetRange] = useState<'1D' | '7D' | '30D' | '60D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
   // Each entry = state before that zoom was applied; pop to step back one level
@@ -661,20 +646,9 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
 
   const handleMouseMove = (e: any) => {
     if (!e) return
-    
-    if (e.activeLabel != null) setCursorX(e.activeLabel)
-    
     if (refAreaLeft !== null && e.activeLabel != null && e.activeLabel !== refAreaRight) {
       setRefAreaRight(e.activeLabel)
     }
-  }
-
-
-
-  const handleChartMouseLeave = () => setCursorX(null)
-
-  const handleChartMouseEnter = (e: any) => {
-    if (e?.activeLabel != null) setCursorX(e.activeLabel)
   }
 
   const handleMouseUp = () => {
@@ -694,180 +668,140 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
 
   return (
     <div className={`w-full h-full py-1 flex flex-col ${className}`}>
-      {/* Chart Section - Flexible Height */}
-      <div className="flex-1 min-h-0 relative">
-        
+      {/* Chart Section - Flexible Height. flex-col so the chart box (flex-1) shrinks to guarantee header/stats/bottom-row always fit on screen. */}
+      <div className="flex-1 min-h-0 relative flex flex-col">
+
         {/* Header Section - Compact and Horizontal */}
-        <div className="mb-4">
-          
-          {/* Compact Header Row - Everything in one line */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
-            {/* Left: Title and Controls */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold text-white">Bitcoin Price Chart</h3>
-                <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-              </div>
-              
-              {/* Time Range Selector - Compact */}
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-gray-400">Range:</Label>
-                <Select 
-                  value={isZoomed ? 'CUSTOM' : timeRange} 
-                  onValueChange={(value: any) => {
-                    if (value !== 'CUSTOM') {
-                      setTimeRange(value)
-                      setIsZoomed(false)
-                      setLeft(0)
-                      setRight(0)
-                    }
-                  }}
-                  disabled={isZoomed}
-                >
-                  <SelectTrigger className={`h-8 w-24 border-gray-600 transition-colors ${
-                    isZoomed 
-                      ? 'bg-orange-600/20 border-orange-500 text-orange-300' 
-                      : 'bg-gray-800/50 text-white hover:bg-gray-800/70'
-                  }`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    <SelectItem value="1D" className="text-white hover:bg-gray-700">1D</SelectItem>
-                    <SelectItem value="7D" className="text-white hover:bg-gray-700">7D</SelectItem>
-                    <SelectItem value="30D" className="text-white hover:bg-gray-700">30D</SelectItem>
-                    <SelectItem value="60D" className="text-white hover:bg-gray-700">60D</SelectItem>
-                    <SelectItem value="90D" className="text-white hover:bg-gray-700">90D</SelectItem>
-                    <SelectItem value="6mo" className="text-white hover:bg-gray-700">6mo</SelectItem>
-                    <SelectItem value="1Y" className="text-white hover:bg-gray-700">1Y</SelectItem>
-                    <SelectItem value="5Y" className="text-white hover:bg-gray-700">5Y</SelectItem>
-                    <SelectItem value="10Y" className="text-white hover:bg-gray-700">10Y</SelectItem>
-                    <SelectItem value="ALL" className="text-white hover:bg-gray-700">ALL</SelectItem>
-                    {isZoomed && (
-                      <SelectItem value="CUSTOM" className="text-orange-300 bg-orange-900/20" disabled>
-                        Custom
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="mb-4 shrink-0">
 
-              {/* Currency Selector */}
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-gray-400">Currency:</Label>
-                <Select value={selectedCurrency} onValueChange={(value: any) => setSelectedCurrency(value)}>
-                  <SelectTrigger className="h-8 w-24 border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors gap-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-900 border-gray-700 max-h-72 w-52">
-                    {CURRENCIES.map((currency) => (
-                      <SelectPrimitive.Item
-                        key={currency.code}
-                        value={currency.code}
-                        className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-3 text-sm outline-none text-white data-[highlighted]:bg-gray-700"
-                      >
-                        <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-                          <SelectPrimitive.ItemIndicator>
-                            <Check className="h-3.5 w-3.5 text-orange-400" />
-                          </SelectPrimitive.ItemIndicator>
-                        </span>
-                        {/* Only flag+code goes in ItemText → this is what SelectValue shows in the trigger */}
-                        <SelectPrimitive.ItemText>
-                          <span className="flex items-center gap-1.5">
-                            <span className="text-base leading-none">{currency.flag}</span>
-                            <span className="font-mono font-semibold text-sm">{currency.code}</span>
-                          </span>
-                        </SelectPrimitive.ItemText>
-                        {/* Name is outside ItemText → dropdown only */}
-                        <span className="ml-2 text-gray-400 text-xs">{currency.name}</span>
-                      </SelectPrimitive.Item>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
+          {/* Row 1: Title + Currency + Actions */}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-white truncate">Bitcoin Price Chart</h3>
+              <div className="w-2 h-2 bg-orange-500 rounded-full shrink-0" />
             </div>
-            
-            {/* Right: Reset + Refresh */}
-            <div className="flex items-center gap-2">
-            {isZoomed && (
-              <div className="flex items-center gap-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={zoomOut}
-                  className="h-8 px-3 gap-1.5 border-orange-500 bg-orange-600/20 text-orange-300 hover:bg-orange-600/40 transition-colors font-medium"
-                  title="Step back one zoom level (Esc)"
-                >
-                  <ZoomOut className="h-3 w-3" />
-                  Reset
-                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-500/30 text-orange-200 text-[10px] font-bold">
-                    {zoomStack.length}
-                  </span>
-                </Button>
-                {zoomStack.length > 1 && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Currency Selector */}
+              <Select value={selectedCurrency} onValueChange={(value: any) => setSelectedCurrency(value)}>
+                <SelectTrigger className="h-8 w-[5.75rem] sm:w-24 px-2 border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors gap-1 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-900 border-gray-700 max-h-72 w-52">
+                  {CURRENCIES.map((currency) => (
+                    <SelectPrimitive.Item
+                      key={currency.code}
+                      value={currency.code}
+                      className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-3 text-sm outline-none text-white data-[highlighted]:bg-gray-700"
+                    >
+                      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+                        <SelectPrimitive.ItemIndicator>
+                          <Check className="h-3.5 w-3.5 text-orange-400" />
+                        </SelectPrimitive.ItemIndicator>
+                      </span>
+                      <SelectPrimitive.ItemText>
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-base leading-none">{currency.flag}</span>
+                          <span className="font-mono font-semibold text-sm">{currency.code}</span>
+                        </span>
+                      </SelectPrimitive.ItemText>
+                      <span className="ml-2 text-gray-400 text-xs">{currency.name}</span>
+                    </SelectPrimitive.Item>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* Zoom reset */}
+              {isZoomed && (
+                <div className="flex items-center gap-1">
                   <Button
                     size="sm"
-                    variant="ghost"
-                    onClick={zoomOutAll}
-                    className="h-8 px-2 text-orange-400/70 hover:text-orange-300 hover:bg-orange-600/20 transition-colors text-xs"
-                    title="Reset to start (Alt+Esc)"
+                    variant="outline"
+                    onClick={zoomOut}
+                    className="h-8 px-2 sm:px-3 gap-1 border-orange-500 bg-orange-600/20 text-orange-300 hover:bg-orange-600/40 transition-colors font-medium"
+                    title="Step back one zoom level (Esc)"
                   >
-                    ×{zoomStack.length}
+                    <ZoomOut className="h-3 w-3" />
+                    <span className="hidden sm:inline">Reset</span>
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-500/30 text-orange-200 text-[10px] font-bold">
+                      {zoomStack.length}
+                    </span>
                   </Button>
-                )}
-              </div>
-            )}
-            <Button
-              size="sm"
-              onClick={async () => {
-                setIsLoading(true)
-                setError(null)
-                
-                try {
-                  console.log(`🔄 Manual refresh for time range: ${timeRange}`)
-                  const apiData = await loadDataFromAPI(timeRange)
-                  
-                  if (apiData.length === 0) {
-                    throw new Error(`No data available for ${timeRange} range`)
-                  }
-                  
-                  console.log(`✅ Refreshed ${apiData.length} data points for ${timeRange}`)
-                  
-                  // Store data for current view
-                  setData(apiData)
-                  
-                  // For ALL time range, also load full dataset for calculators
-                  if (timeRange === 'ALL') {
-                    setFullData(apiData)
-                  } else {
-                    // Load full dataset separately for calculators
-                    try {
-                      const fullData = await loadDataFromAPI('ALL')
-                      setFullData(fullData)
-                    } catch (error) {
-                      console.warn('Failed to load full dataset for calculators:', error)
+                  {zoomStack.length > 1 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={zoomOutAll}
+                      className="h-8 px-2 text-orange-400/70 hover:text-orange-300 hover:bg-orange-600/20 transition-colors text-xs"
+                      title="Reset to start (Alt+Esc)"
+                    >
+                      ×{zoomStack.length}
+                    </Button>
+                  )}
+                </div>
+              )}
+              <Button
+                size="sm"
+                onClick={async () => {
+                  setIsLoading(true)
+                  setError(null)
+                  try {
+                    console.log(`🔄 Manual refresh for time range: ${timeRange}`)
+                    const apiData = await loadDataFromAPI(timeRange)
+                    if (apiData.length === 0) throw new Error(`No data available for ${timeRange} range`)
+                    console.log(`✅ Refreshed ${apiData.length} data points for ${timeRange}`)
+                    setData(apiData)
+                    if (timeRange === 'ALL') {
+                      setFullData(apiData)
+                    } else {
+                      try {
+                        const fullData = await loadDataFromAPI('ALL')
+                        setFullData(fullData)
+                      } catch (error) {
+                        console.warn('Failed to load full dataset for calculators:', error)
+                      }
                     }
+                    setUpdateStatus('Data refreshed successfully')
+                    setLastUpdateTime(new Date().toLocaleTimeString())
+                    setTimeout(() => setUpdateStatus(''), 3000)
+                  } catch (error) {
+                    console.error('Error refreshing data:', error)
+                    setError(error instanceof Error ? error.message : 'Failed to refresh data')
+                    setUpdateStatus('Refresh failed')
+                    setTimeout(() => setUpdateStatus(''), 3000)
+                  } finally {
+                    setIsLoading(false)
                   }
-                  
-                  setUpdateStatus('Data refreshed successfully')
-                  setLastUpdateTime(new Date().toLocaleTimeString())
-                  setTimeout(() => setUpdateStatus(''), 3000)
-                  
-                } catch (error) {
-                  console.error('Error refreshing data:', error)
-                  setError(error instanceof Error ? error.message : 'Failed to refresh data')
-                  setUpdateStatus('Refresh failed')
-                  setTimeout(() => setUpdateStatus(''), 3000)
-                } finally {
-                  setIsLoading(false)
-                }
-              }}
-              className="h-8 px-3 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-medium shadow-lg hover:shadow-orange-500/25 transition-all duration-200"
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              <span className="text-xs">Refresh</span>
-            </Button>
+                }}
+                className="h-8 px-2 sm:px-3 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-medium shadow-lg hover:shadow-orange-500/25 transition-all duration-200"
+              >
+                <RefreshCw className="h-3 w-3" />
+                <span className="hidden sm:inline text-xs ml-1">Refresh</span>
+              </Button>
             </div>
+          </div>
+
+          {/* Row 2: Time Range Pills — horizontal scroll on mobile, edge-faded to hint scrollability */}
+          <div
+            className="flex items-center gap-1 overflow-x-auto scrollbar-none mb-3 pb-0.5 -mx-4 px-4 sm:mx-0 sm:px-0"
+            style={{ WebkitMaskImage: 'linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)', maskImage: 'linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)' }}
+          >
+            {(['1D','7D','30D','60D','90D','6mo','1Y','5Y','10Y','ALL'] as const).map(r => (
+              <button
+                key={r}
+                onClick={() => { if (!isZoomed) { setTimeRange(r); setLeft(0); setRight(0) } }}
+                className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  !isZoomed && timeRange === r
+                    ? 'bg-orange-500 text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+            {isZoomed && (
+              <span className="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium bg-orange-600/20 border border-orange-500/50 text-orange-300">
+                Custom
+              </span>
+            )}
           </div>
           
           {/* Stats Card */}
@@ -891,64 +825,97 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
             const rangeAbsolute = displayPrice - startingPrice
 
             return (
-              <div className="flex items-stretch rounded-xl overflow-hidden border border-white/[0.06] shadow-2xl">
-
-                {/* 1 — Period Start */}
-                <div className="flex-1 px-5 py-4 border-r border-white/[0.05] bg-gray-900/50">
-                  <div className="text-[10px] uppercase tracking-widest text-purple-400/50 mb-2 font-semibold">Period Start</div>
-                  <div className="text-xl font-bold text-purple-300 tabular-nums">{formatPrice(startingPrice, sym)}</div>
-                  <div className="text-[10px] text-gray-500 mt-1">{startDate}</div>
-                </div>
-
-                {/* 2 — Current Price */}
-                <div className="flex-1 bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent px-5 py-4 border-r border-white/[0.05]">
-                  <div className="text-[10px] uppercase tracking-widest text-orange-400/60 mb-2 font-semibold">Current Price</div>
-                  <div className="text-xl font-bold text-white tabular-nums">{formatPrice(displayPrice, sym)}</div>
-                  {livePrice
-                    ? <div className="flex items-center gap-1 mt-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" /><span className="text-[10px] text-green-400/70 font-medium">Live</span></div>
-                    : <div className="text-[10px] text-gray-500 mt-1">{endDate}</div>
-                  }
-                </div>
-
-                {/* 3 — Range Change (togglable % / $) */}
-                <div className={`flex-1 px-5 py-4 border-r border-white/[0.05] bg-gradient-to-br ${positive ? 'from-green-500/10 via-emerald-500/5' : 'from-red-500/10 via-rose-500/5'} to-transparent`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-[10px] uppercase tracking-widest text-gray-400/60 font-semibold">Range Change</div>
-                    <button
-                      onClick={() => setRangeChangeAsDollar(v => !v)}
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors ${rangeChangeAsDollar ? 'border-orange-500/50 text-orange-400 bg-orange-500/10' : 'border-gray-600/50 text-gray-400 bg-gray-800/50 hover:border-gray-500'}`}
-                    >
-                      {rangeChangeAsDollar ? sym : '%'}
-                    </button>
-                  </div>
-                  <div className={`text-xl font-bold tabular-nums ${positive ? 'text-green-400' : 'text-red-400'}`}>
-                    {rangeChangeAsDollar
-                      ? `${positive ? '+' : ''}${formatPrice(rangeAbsolute, sym)}`
-                      : `${positive ? '+' : ''}${rangeChange.toFixed(2)}%`
+              <>
+                {/* Mobile: compact 2-panel (Current Price + Range Change) */}
+                <div className="flex sm:hidden items-stretch rounded-xl overflow-hidden border border-white/[0.06] shadow-xl">
+                  <div className="flex-1 bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent px-4 py-3 border-r border-white/[0.05]">
+                    <div className="text-[9px] uppercase tracking-widest text-orange-400/60 mb-1 font-semibold">Current Price</div>
+                    <div className="text-base font-bold text-white tabular-nums">{formatPrice(displayPrice, sym)}</div>
+                    {livePrice
+                      ? <div className="flex items-center gap-1 mt-0.5"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" /><span className="text-[9px] text-green-400/70 font-medium">Live</span></div>
+                      : <div className="text-[9px] text-gray-500 mt-0.5">{endDate}</div>
                     }
                   </div>
-                  <div className="text-[10px] text-gray-500 mt-1">over {rangeDays}d</div>
+                  <div className={`flex-1 px-4 py-3 bg-gradient-to-br ${positive ? 'from-green-500/10 via-emerald-500/5' : 'from-red-500/10 via-rose-500/5'} to-transparent`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-[9px] uppercase tracking-widest text-gray-400/60 font-semibold">Change</div>
+                      <button
+                        onClick={() => setRangeChangeAsDollar(v => !v)}
+                        className={`text-[8px] font-bold px-1 py-0.5 rounded border transition-colors ${rangeChangeAsDollar ? 'border-orange-500/50 text-orange-400 bg-orange-500/10' : 'border-gray-600/50 text-gray-400 bg-gray-800/50'}`}
+                      >
+                        {rangeChangeAsDollar ? sym : '%'}
+                      </button>
+                    </div>
+                    <div className={`text-base font-bold tabular-nums ${positive ? 'text-green-400' : 'text-red-400'}`}>
+                      {rangeChangeAsDollar
+                        ? `${positive ? '+' : ''}${formatPrice(rangeAbsolute, sym)}`
+                        : `${positive ? '+' : ''}${rangeChange.toFixed(2)}%`
+                      }
+                    </div>
+                    <div className="text-[9px] text-gray-500 mt-0.5">over {rangeDays}d</div>
+                  </div>
                 </div>
 
-                {/* 4 — Date Range */}
-                <div className="flex-1 px-5 py-4 bg-gray-900/50">
-                  <div className="text-[10px] uppercase tracking-widest text-gray-400/50 mb-2 font-semibold">Date Range</div>
-                  <div className="flex items-center gap-1.5 text-sm font-semibold text-white">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
-                    {startDate}
-                    <span className="text-gray-600 mx-0.5">→</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                    {endDate}
+                {/* Desktop: full 4-panel */}
+                <div className="hidden sm:flex items-stretch rounded-xl overflow-hidden border border-white/[0.06] shadow-2xl">
+
+                  {/* 1 — Period Start */}
+                  <div className="flex-1 px-5 py-4 border-r border-white/[0.05] bg-gray-900/50">
+                    <div className="text-[10px] uppercase tracking-widest text-purple-400/50 mb-2 font-semibold">Period Start</div>
+                    <div className="text-xl font-bold text-purple-300 tabular-nums">{formatPrice(startingPrice, sym)}</div>
+                    <div className="text-[10px] text-gray-500 mt-1">{startDate}</div>
                   </div>
-                  <div className="text-[10px] text-gray-500 mt-1">{rangeDays} days total</div>
+
+                  {/* 2 — Current Price */}
+                  <div className="flex-1 bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent px-5 py-4 border-r border-white/[0.05]">
+                    <div className="text-[10px] uppercase tracking-widest text-orange-400/60 mb-2 font-semibold">Current Price</div>
+                    <div className="text-xl font-bold text-white tabular-nums">{formatPrice(displayPrice, sym)}</div>
+                    {livePrice
+                      ? <div className="flex items-center gap-1 mt-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" /><span className="text-[10px] text-green-400/70 font-medium">Live</span></div>
+                      : <div className="text-[10px] text-gray-500 mt-1">{endDate}</div>
+                    }
+                  </div>
+
+                  {/* 3 — Range Change (togglable % / $) */}
+                  <div className={`flex-1 px-5 py-4 border-r border-white/[0.05] bg-gradient-to-br ${positive ? 'from-green-500/10 via-emerald-500/5' : 'from-red-500/10 via-rose-500/5'} to-transparent`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-[10px] uppercase tracking-widest text-gray-400/60 font-semibold">Range Change</div>
+                      <button
+                        onClick={() => setRangeChangeAsDollar(v => !v)}
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors ${rangeChangeAsDollar ? 'border-orange-500/50 text-orange-400 bg-orange-500/10' : 'border-gray-600/50 text-gray-400 bg-gray-800/50 hover:border-gray-500'}`}
+                      >
+                        {rangeChangeAsDollar ? sym : '%'}
+                      </button>
+                    </div>
+                    <div className={`text-xl font-bold tabular-nums ${positive ? 'text-green-400' : 'text-red-400'}`}>
+                      {rangeChangeAsDollar
+                        ? `${positive ? '+' : ''}${formatPrice(rangeAbsolute, sym)}`
+                        : `${positive ? '+' : ''}${rangeChange.toFixed(2)}%`
+                      }
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-1">over {rangeDays}d</div>
+                  </div>
+
+                  {/* 4 — Date Range */}
+                  <div className="flex-1 px-5 py-4 bg-gray-900/50">
+                    <div className="text-[10px] uppercase tracking-widest text-gray-400/50 mb-2 font-semibold">Date Range</div>
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+                      {startDate}
+                      <span className="text-gray-600 mx-0.5">→</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                      {endDate}
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-1">{rangeDays} days total</div>
+                  </div>
                 </div>
-              </div>
+              </>
             )
           })()}
         </div>
         
         {/* Chart Container - Maximized Height */}
-        <div className="w-full h-[calc(100vh-280px)] sm:h-[calc(100vh-300px)] lg:h-[calc(100vh-320px)] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-1 sm:pb-1 lg:pb-2 relative mb-2">
+        <div className="w-full flex-1 min-h-[240px] sm:min-h-[280px] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-1 sm:pb-1 lg:pb-2 relative mb-2">
           {isZoomLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-900/40 rounded-lg backdrop-blur-sm">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
@@ -970,13 +937,11 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart 
                 data={chartData}
-                margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
+                margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onDoubleClick={handleDoubleClick}
-                onMouseEnter={handleChartMouseEnter}
-                onMouseLeave={handleChartMouseLeave}
                 syncId="btc-chart"
               >
                 <defs>
@@ -1008,23 +973,17 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                   tickLine={false}
                   axisLine={false}
                   tickMargin={6}
-                  minTickGap={['7D','30D','60D','90D'].includes(timeRange) ? 0 : 16}
+                  minTickGap={16}
                 />
-                <YAxis 
-                  stroke="#9CA3AF"
-                  fontSize={10}
-                  tickFormatter={formatYAxisValue}
-                  tickLine={false}
-                  axisLine={false}
-                  width={60}
+                <YAxis
+                  hide
                   domain={yAxisConfig.domain as any}
                   allowDataOverflow={false}
                 />
                 <ChartTooltip
-                  cursor={<CustomCursor />}
+                  cursor={false}
                   content={renderTooltipContent}
                   isAnimationActive={false}
-                  cursorStyle={{ stroke: '#f7931a', strokeWidth: 3, strokeDasharray: '5 5' }}
                 />
                 {/* Hover cursor - shows on mouse move */}
                 {/* Selection cursor - shows during drag */}
@@ -1091,6 +1050,18 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                       </g>
                     )
                   }}
+                  // Recharts renders this only for the currently-hovered point, already snapped to the
+                  // curve's actual pixel position — unlike activeCoordinate.y, which tracks the raw mouse Y.
+                  activeDot={(props: any) => {
+                    const { cx, cy } = props
+                    return (
+                      <g style={{ pointerEvents: 'none' }}>
+                        <line x1={cx} x2={cx} y1={0} y2="100%" stroke="#f7931a" strokeWidth={1.5} strokeDasharray="4 4" opacity={0.8} />
+                        <line x1={0} x2="100%" y1={cy} y2={cy} stroke="#f7931a" strokeWidth={1.5} strokeDasharray="4 4" opacity={0.8} />
+                        <circle cx={cx} cy={cy} r={5} fill="#f7931a" stroke="#ffffff" strokeWidth={2} />
+                      </g>
+                    )
+                  }}
                 />
                 {refAreaLeft !== null && refAreaRight !== null ? (
                   <ReferenceArea
@@ -1103,15 +1074,12 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     fillOpacity={0.2}
                   />
                 ) : null}
-                {cursorX != null && (
-                  <ReferenceLine x={cursorX} stroke="#f7931a" strokeWidth={1.5} strokeDasharray="4 4" opacity={0.8} isFront={true} />
-                )}
               </AreaChart>
             </ResponsiveContainer>
-            
+
             {/* Live Price Pulsing Indicator */}
             {realTimePriceData && convertedData.length > 0 && (
-              <div className="absolute top-4 right-4 bg-gray-900/90 border border-green-500/50 rounded-lg px-4 py-2 backdrop-blur-sm shadow-xl">
+              <div className="hidden sm:block absolute top-4 right-4 bg-gray-900/90 border border-green-500/50 rounded-lg px-4 py-2 backdrop-blur-sm shadow-xl">
                 <div className="flex items-center gap-2">
                   <div className="relative flex h-3 w-3">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -1133,9 +1101,9 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
               </div>
             )}
             
-            {/* Range Selection Instructions */}
+            {/* Range Selection Instructions — hidden on mobile (touch drag doesn't trigger zoom) */}
             {!isZoomed && refAreaLeft === null && (
-              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none">
+              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none hidden sm:block">
                 <div className="bg-gray-900/80 border border-gray-600/30 rounded-lg px-3 py-2 text-center shadow-lg backdrop-blur-sm">
                   <div className="text-gray-400 text-xs select-none">
                     Click and drag to select a range

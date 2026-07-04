@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { BTCRealtimeCSVService, BTCHistoricalCSVService } from '@/lib/btc-realtime-csv-service'
-import { promises as fs } from 'fs'
+import { getStoredCSVUpdatedAt } from '@/lib/csv-storage'
 import path from 'path'
 
 const API_KEY = process.env.COINGECKO_API_KEY || 'CG-kWAbG4Uj8mRoUxBDjXWSMVYz'
@@ -171,11 +171,8 @@ export async function GET(request: NextRequest) {
     cache.set(timeRange, { data: chartData, ts: Date.now() })
 
     // Get file mod time for last-updated display
-    let fileModified: string | null = null
-    try {
-      const csvPath = path.join(process.cwd(), 'public', 'BTC Price History copy.csv')
-      fileModified = (await fs.stat(csvPath)).mtime.toISOString()
-    } catch { /* ignore */ }
+    const csvPath = path.join(process.cwd(), 'public', 'BTC Price History copy.csv')
+    const fileModified = await getStoredCSVUpdatedAt('BTC Price History copy.csv', csvPath)
 
     return NextResponse.json({
       success: true,

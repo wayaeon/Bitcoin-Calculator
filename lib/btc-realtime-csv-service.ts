@@ -1,5 +1,5 @@
-import { readFileSync } from 'fs'
 import { join } from 'path'
+import { readStoredCSV } from './csv-storage'
 
 interface RealtimeBTCData {
   id: number
@@ -39,10 +39,10 @@ interface HistoricalBTCData {
 export class BTCRealtimeCSVService {
   private csvPath = join(process.cwd(), 'public', 'BTC_Realtime_Data.csv')
 
-  private readCSVData(): RealtimeBTCData[] {
+  private async readCSVData(): Promise<RealtimeBTCData[]> {
     try {
-      const csvContent = readFileSync(this.csvPath, 'utf-8')
-      
+      const csvContent = await readStoredCSV('BTC_Realtime_Data.csv', this.csvPath)
+
       if (!csvContent.trim()) {
         console.warn('⚠️ Realtime CSV file is empty')
         return []
@@ -82,12 +82,12 @@ export class BTCRealtimeCSVService {
   }
 
   async getLatestPrice(): Promise<RealtimeBTCData | null> {
-    const data = this.readCSVData()
+    const data = await this.readCSVData()
     return data.length > 0 ? data[data.length - 1] : null
   }
 
   async getPricesInRange(startDate: Date, endDate: Date): Promise<ChartDataPoint[]> {
-    const data = this.readCSVData()
+    const data = await this.readCSVData()
     
     if (data.length === 0) {
       console.warn('⚠️ No realtime data available for range query')
@@ -114,7 +114,7 @@ export class BTCRealtimeCSVService {
   }
 
   async getRecentPrices(limit: number = 100): Promise<RealtimeBTCData[]> {
-    const data = this.readCSVData()
+    const data = await this.readCSVData()
     return data.slice(-limit)
   }
 
@@ -131,7 +131,7 @@ export class BTCRealtimeCSVService {
     latestTimestamp: string | null
     dataRange: { start: string | null; end: string | null }
   }> {
-    const data = this.readCSVData()
+    const data = await this.readCSVData()
     
     if (data.length === 0) {
       return {
@@ -160,10 +160,10 @@ export class BTCRealtimeCSVService {
 export class BTCHistoricalCSVService {
   private csvPath = join(process.cwd(), 'public', 'BTC Price History copy.csv')
 
-  private readHistoricalCSVData(): HistoricalBTCData[] {
+  private async readHistoricalCSVData(): Promise<HistoricalBTCData[]> {
     try {
-      const csvContent = readFileSync(this.csvPath, 'utf-8')
-      
+      const csvContent = await readStoredCSV('BTC Price History copy.csv', this.csvPath)
+
       if (!csvContent.trim()) {
         console.warn('⚠️ Historical CSV file is empty')
         return []
@@ -225,7 +225,7 @@ export class BTCHistoricalCSVService {
   }
 
   async getPricesInRange(startDate: Date, endDate: Date): Promise<ChartDataPoint[]> {
-    const data = this.readHistoricalCSVData()
+    const data = await this.readHistoricalCSVData()
     
     if (data.length === 0) {
       console.warn('⚠️ No historical data available for range query')
@@ -256,7 +256,7 @@ export class BTCHistoricalCSVService {
     dateRange: { start: string | null; end: string | null }
     priceRange: { min: number | null; max: number | null }
   }> {
-    const data = this.readHistoricalCSVData()
+    const data = await this.readHistoricalCSVData()
     
     if (data.length === 0) {
       return {
