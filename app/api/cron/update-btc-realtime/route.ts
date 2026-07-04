@@ -1,7 +1,7 @@
 /**
  * API Endpoint: /api/cron/update-btc-realtime
  * Collects current Bitcoin price data every 5 minutes
- * Called by Vercel Cron: */5 * * * *
+ * Called by Vercel Cron: every 5 minutes (see vercel.json)
  */
 
 import { NextRequest, NextResponse } from 'next/server'

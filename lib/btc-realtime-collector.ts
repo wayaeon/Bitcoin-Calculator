@@ -4,9 +4,11 @@
  * Implements retry logic, rate limiting, and error handling
  */
 
-import { promises as fs } from 'fs'
 import path from 'path'
 import { logInfo, logWarn, logError } from './logger'
+import { readStoredCSV, writeStoredCSV } from './csv-storage'
+
+const REALTIME_CSV_PATHNAME = 'BTC_Realtime_Data.csv'
 
 export interface BTCRealtimeData {
   timestamp: number
@@ -178,14 +180,11 @@ async function validateData(data: BTCRealtimeData): Promise<boolean> {
  */
 export async function saveRealtimeDataToCSV(data: BTCRealtimeData): Promise<void> {
   const csvPath = path.join(process.cwd(), 'public', 'BTC_Realtime_Data.csv')
-  
+
   try {
-    // Read existing CSV
-    let csvContent = ''
-    try {
-      csvContent = await fs.readFile(csvPath, 'utf-8')
-    } catch (error) {
-      // File doesn't exist, create with header
+    // Read existing CSV (Blob in production, local file in dev — see lib/csv-storage.ts)
+    let csvContent = await readStoredCSV(REALTIME_CSV_PATHNAME, csvPath)
+    if (!csvContent.trim()) {
       csvContent = 'entry,price,volume_24h,market_cap,price_change_24h,price_change_percentage_24h,created_at,updated_at\n'
     }
 
@@ -202,10 +201,11 @@ export async function saveRealtimeDataToCSV(data: BTCRealtimeData): Promise<void
     const maxEntries = 8640
     const trimmedLines = dataLines.slice(-maxEntries)
 
-    // Write back to file
+    // Write back to storage
     const newContent = [header, ...trimmedLines].join('\n') + '\n'
-    await fs.writeFile(csvPath, newContent, 'utf-8')
-    
+    await writeStoredCSV(REALTIME_CSV_PATHNAME, newContent, csvPath)
+
+
     await logInfo('Collector', `Saved data to CSV (${trimmedLines.length} entries)`)
   } catch (error) {
     await logError('Collector', 'Error saving to CSV', error)

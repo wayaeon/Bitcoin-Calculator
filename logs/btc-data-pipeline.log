@@ -8,3 +8,13 @@
 [2025-10-12T03:02:37.457Z] [INFO] [Consolidator] Wrote 484 rows to historical CSV
 [2025-10-12T03:02:37.461Z] [INFO] [Consolidator] Trimmed realtime CSV to 1 entries
 [2025-10-12T03:02:37.467Z] [INFO] [Consolidator] Data consolidation completed successfully {"realtimeEntries":1,"newRowsAdded":1,"rowsUpdated":0}
+[2026-07-04T15:58:20.853Z] [INFO] [Collector] Starting data collection...
+[2026-07-04T15:58:21.088Z] [INFO] [Collector] Successfully fetched fresh data from API {"price":62873}
+[2026-07-04T15:58:21.101Z] [INFO] [Collector] Saved data to CSV (117 entries)
+[2026-07-04T15:58:21.101Z] [INFO] [Collector] Data collection completed successfully
+[2026-07-04T15:58:28.848Z] [INFO] [Consolidator] Starting data consolidation...
+[2026-07-04T15:58:28.860Z] [INFO] [Consolidator] Found 1 entries from last 24 hours
+[2026-07-04T15:58:28.860Z] [INFO] [Consolidator] Added new row for 2026-07-04
+[2026-07-04T15:58:28.865Z] [INFO] [Consolidator] Wrote 322 rows to historical CSV
+[2026-07-04T15:58:28.867Z] [INFO] [Consolidator] Trimmed realtime CSV to 116 entries
+[2026-07-04T15:58:28.867Z] [INFO] [Consolidator] Data consolidation completed successfully {"realtimeEntries":1,"newRowsAdded":1,"rowsUpdated":0}
