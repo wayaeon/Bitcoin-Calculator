@@ -5,7 +5,7 @@
  */
 
 import path from 'path'
-import { logInfo, logWarn, logError } from './logger'
+import { logInfo, logError } from './logger'
 import { readStoredCSV, writeStoredCSV } from './csv-storage'
 
 const REALTIME_CSV_PATHNAME = 'BTC_Realtime_Data.csv'
@@ -46,63 +46,79 @@ export interface ConsolidationResult {
   error?: string
 }
 
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || 'CG-kWAbG4Uj8mRoUxBDjXWSMVYz'
+
 /**
- * Main consolidation function
+ * Fetch a full day's real OHLCV directly from CoinGecko.
+ *
+ * Vercel's Hobby plan only allows once-a-day cron jobs, so we can't rely on
+ * frequent (5-min) realtime snapshots to build the day's OHLC anymore — this
+ * pulls the actual daily candle straight from CoinGecko instead, same approach
+ * as scripts/backfill-historical-data.js.
+ */
+async function fetchDailyOHLCVFromCoinGecko(dateStr: string): Promise<HistoricalDataRow | null> {
+  const from = Math.floor(new Date(`${dateStr}T00:00:00Z`).getTime() / 1000)
+  const to = Math.floor(new Date(`${dateStr}T23:59:59Z`).getTime() / 1000)
+
+  const res = await fetch(
+    `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range?vs_currency=usd&from=${from}&to=${to}`,
+    { headers: { 'x-cg-demo-api-key': COINGECKO_API_KEY } }
+  )
+  if (!res.ok) throw new Error(`CoinGecko ${res.status}: ${res.statusText}`)
+
+  const { prices, total_volumes, market_caps } = await res.json()
+  if (!prices?.length) return null
+
+  const values = prices.map(([, p]: [number, number]) => p)
+  const nextDay = new Date(`${dateStr}T00:00:00Z`)
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+
+  return {
+    Start: dateStr,
+    End: nextDay.toISOString().split('T')[0],
+    Open: values[0],
+    High: Math.max(...values),
+    Low: Math.min(...values),
+    Close: values[values.length - 1],
+    Volume: total_volumes?.length ? total_volumes[total_volumes.length - 1][1] : 0,
+    'Market Cap': market_caps?.length ? market_caps[market_caps.length - 1][1] : 0,
+  }
+}
+
+/**
+ * Main consolidation function — fetches yesterday's real daily candle from
+ * CoinGecko and upserts it into the historical CSV.
  */
 export async function consolidateRealtimeData(): Promise<ConsolidationResult> {
   await logInfo('Consolidator', 'Starting data consolidation...')
-  
-  try {
-    // Read realtime data
-    const realtimeData = await readRealtimeCSV()
-    if (realtimeData.length === 0) {
-      return {
-        success: false,
-        message: 'No realtime data available',
-        error: 'Empty realtime CSV file'
-      }
-    }
 
-    // Read historical data
+  try {
     const historicalData = await readHistoricalCSV()
 
-    // Get data from last 24 hours
-    const now = Date.now()
-    const oneDayAgo = now - (24 * 60 * 60 * 1000)
-    const last24Hours = realtimeData.filter(row => row.entry >= oneDayAgo)
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const ohlcv = await fetchDailyOHLCVFromCoinGecko(yesterday)
 
-    if (last24Hours.length === 0) {
+    if (!ohlcv) {
       return {
         success: false,
-        message: 'No data from last 24 hours',
-        error: 'No recent data to consolidate'
+        message: 'No CoinGecko data available for the target day',
+        error: `Empty market_chart response for ${yesterday}`
       }
     }
 
-    await logInfo('Consolidator', `Found ${last24Hours.length} entries from last 24 hours`)
+    const existingIndex = historicalData.findIndex(row => row.Start === ohlcv.Start)
 
-    // Calculate OHLCV for today
-    const today = new Date().toISOString().split('T')[0]
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    
-    const ohlcv = calculateOHLCV(last24Hours, yesterday, today)
-
-    // Check if today's date already exists in historical data
-    const existingIndex = historicalData.findIndex(row => row.End === today)
-    
     let newRowsAdded = 0
     let rowsUpdated = 0
 
     if (existingIndex !== -1) {
-      // Update existing row
       historicalData[existingIndex] = ohlcv
       rowsUpdated = 1
-      await logInfo('Consolidator', `Updated existing row for ${today}`)
+      await logInfo('Consolidator', `Updated existing row for ${ohlcv.Start}`)
     } else {
-      // Add new row
       historicalData.push(ohlcv)
       newRowsAdded = 1
-      await logInfo('Consolidator', `Added new row for ${today}`)
+      await logInfo('Consolidator', `Added new row for ${ohlcv.Start}`)
     }
 
     // Sort by date (ensure chronological order)
@@ -116,11 +132,7 @@ export async function consolidateRealtimeData(): Promise<ConsolidationResult> {
     // Write back to historical CSV
     await writeHistoricalCSV(uniqueData)
 
-    // Trim realtime CSV to last 30 days
-    await trimRealtimeCSV(realtimeData)
-
     await logInfo('Consolidator', 'Data consolidation completed successfully', {
-      realtimeEntries: last24Hours.length,
       newRowsAdded,
       rowsUpdated
     })
@@ -129,10 +141,10 @@ export async function consolidateRealtimeData(): Promise<ConsolidationResult> {
       success: true,
       message: 'Data consolidation completed successfully',
       stats: {
-        realtimeEntries: last24Hours.length,
+        realtimeEntries: 1,
         newRowsAdded,
         rowsUpdated,
-        dateRange: `${yesterday} to ${today}`
+        dateRange: ohlcv.Start
       }
     }
   } catch (error) {
@@ -142,41 +154,6 @@ export async function consolidateRealtimeData(): Promise<ConsolidationResult> {
       message: 'Consolidation failed',
       error: error instanceof Error ? error.message : 'Unknown error'
     }
-  }
-}
-
-/**
- * Calculate OHLCV (Open, High, Low, Close, Volume) from realtime data
- */
-function calculateOHLCV(
-  data: RealtimeDataRow[],
-  startDate: string,
-  endDate: string
-): HistoricalDataRow {
-  // Sort by timestamp
-  const sorted = [...data].sort((a, b) => a.entry - b.entry)
-
-  const prices = sorted.map(d => d.price)
-  const open = sorted[0].price
-  const high = Math.max(...prices)
-  const low = Math.min(...prices)
-  const close = sorted[sorted.length - 1].price
-
-  // Calculate average volume (since realtime data has 24h rolling volume)
-  const avgVolume = sorted.reduce((sum, d) => sum + d.volume_24h, 0) / sorted.length
-
-  // Use last market cap value
-  const marketCap = sorted[sorted.length - 1].market_cap
-
-  return {
-    Start: startDate,
-    End: endDate,
-    Open: open,
-    High: high,
-    Low: low,
-    Close: close,
-    Volume: avgVolume,
-    'Market Cap': marketCap
   }
 }
 
@@ -239,9 +216,11 @@ async function readHistoricalCSV(): Promise<HistoricalDataRow[]> {
     
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i]
-      const values = line.split(',')
-      
-      if (values.length >= 9) {
+      // Older rows in this file are tab-delimited, newer rows comma-delimited — handle both
+      // (see BTCHistoricalCSVService.readHistoricalCSVData, which already does this).
+      const values = line.includes('\t') ? line.split('\t') : line.split(',')
+
+      if (values.length >= 8) {
         data.push({
           Start: values[0],
           End: values[1],
@@ -299,31 +278,6 @@ function removeDuplicates(data: HistoricalDataRow[]): HistoricalDataRow[] {
   return Array.from(seen.values()).sort((a, b) => {
     return new Date(a.End).getTime() - new Date(b.End).getTime()
   })
-}
-
-/**
- * Trim realtime CSV to last 30 days
- */
-async function trimRealtimeCSV(data: RealtimeDataRow[]): Promise<void> {
-  const csvPath = path.join(process.cwd(), 'public', 'BTC_Realtime_Data.csv')
-  
-  try {
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000)
-    const trimmedData = data.filter(row => row.entry >= thirtyDaysAgo)
-
-    const header = 'entry,price,volume_24h,market_cap,price_change_24h,price_change_percentage_24h,created_at,updated_at'
-    const rows = trimmedData.map(row => 
-      `${row.entry},${row.price},${row.volume_24h},${row.market_cap},${row.price_change_24h},${row.price_change_percentage_24h},${row.created_at},${row.updated_at}`
-    )
-
-    const content = [header, ...rows].join('\n') + '\n'
-    await writeStoredCSV(REALTIME_CSV_PATHNAME, content, csvPath)
-
-    await logInfo('Consolidator', `Trimmed realtime CSV to ${trimmedData.length} entries`)
-  } catch (error) {
-    await logWarn('Consolidator', 'Error trimming realtime CSV', error)
-    // Don't throw - trimming is not critical
-  }
 }
 
 /**
