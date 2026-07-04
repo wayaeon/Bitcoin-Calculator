@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/chart'
 import { Label } from '@/components/ui/label'
 import { AreaChart, Area } from 'recharts'
-import { convertCurrency, getSupportedCurrencies } from '@/lib/currency-api'
 import { formatPrice } from '@/lib/btc-calculator'
 import { BTCChartTooltipEnhanced } from '@/components/btc-chart-tooltip'
 import { useBTCPrice } from '@/hooks/use-btc-price'
@@ -106,6 +105,14 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   const selectedCurrencyInfo = useMemo(() =>
     CURRENCIES.find(c => c.code === selectedCurrency), [selectedCurrency]
   )
+
+  // The live price feed always returns USD — convert it before displaying/positioning
+  // anywhere the selected currency isn't USD (stats card, chart reference line, LIVE badge).
+  const liveConvertedPrice = useMemo(() => {
+    if (!realTimePriceData) return null
+    const rate = exchangeRates[selectedCurrency] || 1
+    return realTimePriceData.price * rate
+  }, [realTimePriceData, exchangeRates, selectedCurrency])
 
   // Fetch exchange rates from stored file
   const fetchExchangeRates = useCallback(async () => {
@@ -824,8 +831,8 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
               filteredData = convertedData.slice(left, right + 1)
 
             const startingPrice = filteredData[0].price
-            // Use live price for "current" when available, otherwise chart end
-            const livePrice = realTimePriceData?.price
+            // Use live price (already converted to selected currency) for "current" when available, otherwise chart end
+            const livePrice = liveConvertedPrice
             const displayPrice = livePrice ?? filteredData[filteredData.length - 1].price
             const rangeChange = ((displayPrice - startingPrice) / startingPrice) * 100
             const positive = rangeChange >= 0
@@ -1008,15 +1015,15 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     opacity={0.8}
                   />
                 )}
-                {/* Real-time Price Reference Line */}
-                {realTimePriceData && (
+                {/* Real-time Price Reference Line — positioned using the currency-converted price so it lines up with the (also converted) Y scale */}
+                {liveConvertedPrice != null && (
                   <ReferenceLine
-                    y={realTimePriceData.price}
+                    y={liveConvertedPrice}
                     stroke="#10b981"
                     strokeWidth={2}
                     strokeDasharray="5 5"
                     label={{
-                      value: `Live: ${formatPrice(realTimePriceData.price, selectedCurrencyInfo?.symbol)}`,
+                      value: `Live: ${formatPrice(liveConvertedPrice, selectedCurrencyInfo?.symbol)}`,
                       position: 'right',
                       fill: '#10b981',
                       fontSize: 12,
@@ -1101,7 +1108,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     LIVE
                   </div>
                   <div className="text-sm text-white font-bold">
-                    {formatPrice(realTimePriceData.price, selectedCurrencyInfo?.symbol)}
+                    {formatPrice(liveConvertedPrice ?? realTimePriceData.price, selectedCurrencyInfo?.symbol)}
                   </div>
                   <div className={`text-xs font-semibold ${
                     (realTimePriceData.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'

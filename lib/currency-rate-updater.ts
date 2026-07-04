@@ -1,5 +1,5 @@
-import { promises as fs } from 'fs'
 import path from 'path'
+import { readStoredCSV, writeStoredCSV } from './csv-storage'
 
 export interface CurrencyRate {
   code: string
@@ -15,7 +15,8 @@ export interface CurrencyRatesData {
   rates: CurrencyRate[]
 }
 
-const CURRENCY_API_KEY = process.env.CURRENCY_API_KEY
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || 'CG-kWAbG4Uj8mRoUxBDjXWSMVYz'
+const CURRENCY_PATHNAME = 'currency-conversion.md'
 const CURRENCY_FILE_PATH = path.join(process.cwd(), 'public', 'currency-conversion.md')
 
 // Supported currencies with their symbols and names
@@ -42,77 +43,62 @@ const SUPPORTED_CURRENCIES = [
   { code: 'PLN', symbol: 'zł', name: 'Polish Złoty' }
 ]
 
-// Check if we should perform the update (7am and 7pm PST)
-export function shouldUpdateCurrencyRates(): boolean {
-  const now = new Date()
-  const pstTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-  const hour = pstTime.getHours()
-  
-  // Update at 7am and 7pm PST
-  return hour === 7 || hour === 19
-}
-
-// Fetch live currency rates from API
+// Fetch live currency rates via CoinGecko's exchange_rates endpoint (BTC-denominated
+// cross rates) instead of a dedicated currency API — avoids needing a separate paid
+// key, reuses the CoinGecko key already used elsewhere in this app.
 export async function fetchLiveCurrencyRates(): Promise<CurrencyRate[]> {
-  if (!CURRENCY_API_KEY) {
-    throw new Error('CURRENCY_API_KEY not configured')
+  const response = await fetch('https://api.coingecko.com/api/v3/exchange_rates', {
+    headers: { 'x-cg-demo-api-key': COINGECKO_API_KEY },
+  })
+
+  if (!response.ok) {
+    throw new Error(`CoinGecko exchange_rates error: ${response.status}`)
   }
 
-  try {
-    const response = await fetch(`https://api.currencyapi.com/v3/latest?apikey=${CURRENCY_API_KEY}&base_currency=USD`)
-    
-    if (!response.ok) {
-      throw new Error(`Currency API error: ${response.status}`)
-    }
-    
-    const data = await response.json()
-    const rates: CurrencyRate[] = []
-    
-    // Add USD as base currency
-    rates.push({
-      code: 'USD',
-      name: 'US Dollar',
-      symbol: '$',
-      rate: 1,
-      lastUpdated: new Date().toISOString()
-    })
-    
-    // Add other currencies
-    for (const currency of SUPPORTED_CURRENCIES) {
-      if (currency.code !== 'USD' && data.data[currency.code]) {
-        rates.push({
-          code: currency.code,
-          name: currency.name,
-          symbol: currency.symbol,
-          rate: data.data[currency.code].value,
-          lastUpdated: new Date().toISOString()
-        })
-      }
-    }
-    
-    return rates
-  } catch (error) {
-    console.error('Error fetching live currency rates:', error)
-    throw error
+  const { rates: btcRates } = await response.json()
+  const usdPerBtc = btcRates?.usd?.value
+  if (!usdPerBtc) {
+    throw new Error('CoinGecko response missing USD rate')
   }
+
+  const now = new Date().toISOString()
+  const rates: CurrencyRate[] = []
+
+  for (const currency of SUPPORTED_CURRENCIES) {
+    if (currency.code === 'USD') {
+      rates.push({ ...currency, rate: 1, lastUpdated: now })
+      continue
+    }
+    const perBtc = btcRates?.[currency.code.toLowerCase()]?.value
+    if (perBtc == null) continue
+    // perBtc / usdPerBtc = how many units of this currency equal 1 USD
+    rates.push({ ...currency, rate: perBtc / usdPerBtc, lastUpdated: now })
+  }
+
+  return rates
 }
 
-// Read current currency rates from file
+// Read current currency rates from storage (Blob in production, local file in dev — see lib/csv-storage.ts)
 export async function readCurrencyRatesFromFile(): Promise<CurrencyRatesData | null> {
   try {
-    const content = await fs.readFile(CURRENCY_FILE_PATH, 'utf-8')
+    const content = await readStoredCSV(CURRENCY_PATHNAME, CURRENCY_FILE_PATH)
+    if (!content.trim()) return null
     const lines = content.split('\n')
-    
+
     const rates: CurrencyRate[] = []
     let lastUpdated = ''
     let baseCurrency = 'USD'
-    
+
+    // Data rows look like "| USD | US Dollar | $ | 1.000000 | ... |" — match a
+    // 3-letter currency code right after the leading pipe to skip the header/separator rows.
+    const rowPattern = /^\|\s*([A-Z]{3})\s*\|/
+
     for (const line of lines) {
-      if (line.startsWith('Last Updated:')) {
-        lastUpdated = line.replace('Last Updated:', '').trim()
-      } else if (line.startsWith('Base Currency:')) {
-        baseCurrency = line.replace('Base Currency:', '').trim()
-      } else if (line.includes('|') && !line.startsWith('|') && !line.includes('---')) {
+      if (line.includes('Last Updated:')) {
+        lastUpdated = line.split('Last Updated:')[1].replace(/\*/g, '').trim()
+      } else if (line.includes('Base Currency:')) {
+        baseCurrency = line.split('Base Currency:')[1].replace(/\*/g, '').trim()
+      } else if (rowPattern.test(line)) {
         const parts = line.split('|').map(p => p.trim()).filter(p => p)
         if (parts.length >= 4) {
           rates.push({
@@ -172,11 +158,11 @@ ${rates.map(rate =>
 ).join('\n')}
 
 ---
-*Rates are updated twice daily at 7:00 AM and 7:00 PM PST*
-*Data provided by CurrencyAPI.com*
+*Rates are updated once daily*
+*Data derived from CoinGecko's BTC exchange rates*
 `
 
-  await fs.writeFile(CURRENCY_FILE_PATH, content, 'utf-8')
+  await writeStoredCSV(CURRENCY_PATHNAME, content, CURRENCY_FILE_PATH)
 }
 
 // Update currency rates
