@@ -217,59 +217,73 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
 
 
 
-  // Single data loading effect - only runs when timeRange changes
+  // Single data loading effect - only runs when timeRange changes.
+  // `cancelled` guards against out-of-order responses: if the user switches ranges again
+  // before this fetch resolves, its (now-stale) result must not overwrite the newer one.
   useEffect(() => {
+    let cancelled = false
+
     const loadDataForRange = async () => {
       setIsLoading(true)
       setError(null)
-      
+
       try {
         console.log(`🔄 Loading data for time range: ${timeRange}`)
         const apiData = await loadDataFromAPI(timeRange)
-        
+        if (cancelled) return
+
         if (apiData.length === 0) {
           throw new Error(`No data available for ${timeRange} range`)
         }
-        
+
         console.log(`✅ Loaded ${apiData.length} data points for ${timeRange}`)
         console.log(`📅 Data range: ${new Date(apiData[0]?.timestamp).toISOString()} to ${new Date(apiData[apiData.length - 1]?.timestamp).toISOString()}`)
-        
-        // Store data for current view
+
         setData(apiData)
-        
+
         // For ALL time range, also load full dataset for calculators
         if (timeRange === 'ALL') {
           setFullData(apiData)
         } else {
-          // Load full dataset separately for calculators
           try {
             const fullData = await loadDataFromAPI('ALL')
-            setFullData(fullData)
+            if (!cancelled) setFullData(fullData)
           } catch (error) {
             console.warn('Failed to load full dataset for calculators:', error)
           }
         }
-        
+
       } catch (error) {
+        if (cancelled) return
         console.error('Error loading data:', error)
         setError(error instanceof Error ? error.message : 'Failed to load data')
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
-    
+
     loadDataForRange()
+    return () => { cancelled = true }
   }, [timeRange]) // ONLY depend on timeRange
 
-  // Live updates - only check every 5 minutes, don't trigger on data changes
+  // Live updates - re-fetch the CURRENTLY selected range every 5 minutes.
+  // Refs (not state) keep the interval reading fresh values without needing to be
+  // torn down/recreated every time timeRange or data changes — the previous version
+  // captured timeRange in a closure at mount time and never saw later range switches,
+  // silently re-overwriting the view with the original range's data every 5 minutes.
+  const timeRangeRef = useRef(timeRange)
+  const dataRef = useRef(data)
+  useEffect(() => { timeRangeRef.current = timeRange }, [timeRange])
+  useEffect(() => { dataRef.current = data }, [data])
+
   useEffect(() => {
     const checkUpdates = async () => {
       try {
-        // Check if we have recent data (within last 5 minutes)
-        if (data.length > 0) {
-          const latestTimestamp = data[data.length - 1].timestamp
+        const currentData = dataRef.current
+        if (currentData.length > 0) {
+          const latestTimestamp = currentData[currentData.length - 1].timestamp
           const fiveMinutesAgo = Date.now() - (5 * 60 * 1000)
-          
+
           if (latestTimestamp > fiveMinutesAgo) {
             setUpdateStatus('Data is current')
             setLastUpdateTime(new Date().toLocaleTimeString())
@@ -277,29 +291,27 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
             return
           }
         }
-        
+
         setUpdateStatus('Checking for updates...')
-        
-        // Reload current time range data
-        const apiData = await loadDataFromAPI(timeRange)
+
+        const apiData = await loadDataFromAPI(timeRangeRef.current)
         setData(apiData)
-        
+
         setLastLiveUpdate(new Date())
         setUpdateStatus('Data updated successfully')
         setLastUpdateTime(new Date().toLocaleTimeString())
         setTimeout(() => setUpdateStatus(''), 3000)
-        
+
       } catch (error) {
         console.error('Error checking for updates:', error)
         setUpdateStatus('Update failed')
         setTimeout(() => setUpdateStatus(''), 3000)
       }
     }
-    
-    // Only run initial check, don't depend on changing values
+
     const interval = setInterval(checkUpdates, 5 * 60 * 1000) // Check every 5 minutes
     return () => clearInterval(interval)
-  }, []) // Empty dependency array - only runs once on mount
+  }, []) // Empty dependency array is safe now — refs above stay current
 
   const filterDataByTimeRange = useCallback((allData: BTCPriceData[], range: string): BTCPriceData[] => {
     if (allData.length === 0) return []
