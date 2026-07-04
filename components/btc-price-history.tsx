@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import * as SelectPrimitive from '@radix-ui/react-select'
-import { Check } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command'
+import { Check, ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { RefreshCw, TrendingUp, Database, Clock, BarChart3, Calendar, DollarSign, ZoomOut } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ReferenceArea, ReferenceLine } from 'recharts'
@@ -68,6 +68,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   const [fullData, setFullData] = useState<BTCPriceData[]>([]) // Store full dataset for calculators
   const [timeRange, setTimeRange] = useState<'1D' | '7D' | '30D' | '60D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
   const [selectedCurrency, setSelectedCurrency] = useState('USD')
+  const [isCurrencyPickerOpen, setIsCurrencyPickerOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // ponytail: derived — no state, no extra render cycle
@@ -700,34 +701,55 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
               <div className="w-2 h-2 bg-orange-500 rounded-full shrink-0" />
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              {/* Currency Selector */}
-              <Select value={selectedCurrency} onValueChange={(value: any) => setSelectedCurrency(value)}>
-                <SelectTrigger className="h-8 w-[5.75rem] sm:w-24 px-2 border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors gap-1 shrink-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-900 border-gray-700 max-h-72 w-52">
-                  {CURRENCIES.map((currency) => (
-                    <SelectPrimitive.Item
-                      key={currency.code}
-                      value={currency.code}
-                      className="relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-3 text-sm outline-none text-white data-[highlighted]:bg-gray-700"
-                    >
-                      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-                        <SelectPrimitive.ItemIndicator>
-                          <Check className="h-3.5 w-3.5 text-orange-400" />
-                        </SelectPrimitive.ItemIndicator>
-                      </span>
-                      <SelectPrimitive.ItemText>
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-base leading-none">{currency.flag}</span>
-                          <span className="font-mono font-semibold text-sm">{currency.code}</span>
-                        </span>
-                      </SelectPrimitive.ItemText>
-                      <span className="ml-2 text-gray-400 text-xs">{currency.name}</span>
-                    </SelectPrimitive.Item>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Currency Selector — searchable combobox (Popover + cmdk) instead of a plain Select,
+                  so users can type a currency/country name instead of scanning the whole list. */}
+              <Popover open={isCurrencyPickerOpen} onOpenChange={setIsCurrencyPickerOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-8 w-[5.75rem] sm:w-24 px-2 flex items-center justify-between gap-1 rounded-md border border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors shrink-0 text-sm"
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      <span className="text-base leading-none">{selectedCurrencyInfo?.flag}</span>
+                      <span className="font-mono font-semibold">{selectedCurrencyInfo?.code}</span>
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-64 p-0 bg-gray-900 border-gray-700">
+                  <Command className="bg-transparent" filter={(value, search) => value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0}>
+                    <CommandInput
+                      placeholder="Search currency or country..."
+                      className="text-white placeholder:text-gray-500"
+                    />
+                    <CommandList className="max-h-72 scroll-smooth overscroll-contain">
+                      <CommandEmpty className="text-gray-400">No currency found.</CommandEmpty>
+                      <CommandGroup>
+                        {CURRENCIES.map((currency) => (
+                          <CommandItem
+                            key={currency.code}
+                            value={`${currency.name} ${currency.code}`}
+                            onSelect={() => {
+                              setSelectedCurrency(currency.code)
+                              setIsCurrencyPickerOpen(false)
+                            }}
+                            className="flex items-center justify-between gap-2 py-1.5 text-white data-[selected=true]:bg-gray-700 cursor-pointer"
+                          >
+                            <span className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-base leading-none shrink-0">{currency.flag}</span>
+                              <span className="font-mono font-semibold text-sm shrink-0">{currency.code}</span>
+                              <span className="text-gray-400 text-xs truncate">{currency.name}</span>
+                            </span>
+                            {currency.code === selectedCurrency && (
+                              <Check className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
               {/* Zoom reset */}
               {isZoomed && (
                 <div className="flex items-center gap-1">
