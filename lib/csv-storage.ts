@@ -17,7 +17,11 @@ export async function readStoredCSV(pathname: string, localPath: string): Promis
   if (useBlob) {
     try {
       const info = await head(pathname)
-      const res = await fetch(info.url, { cache: 'no-store' })
+      // Store is private access — the plain url isn't publicly fetchable, needs the token.
+      const res = await fetch(info.downloadUrl, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+      })
       return res.ok ? await res.text() : ''
     } catch {
       return '' // not created yet
@@ -32,7 +36,7 @@ export async function readStoredCSV(pathname: string, localPath: string): Promis
 
 export async function writeStoredCSV(pathname: string, content: string, localPath: string): Promise<void> {
   if (useBlob) {
-    await put(pathname, content, { access: 'public', contentType: 'text/csv', allowOverwrite: true })
+    await put(pathname, content, { access: 'private', contentType: 'text/csv', allowOverwrite: true })
     return
   }
   await fs.writeFile(localPath, content, 'utf-8')

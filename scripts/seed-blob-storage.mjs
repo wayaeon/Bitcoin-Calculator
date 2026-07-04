@@ -26,7 +26,7 @@ if (!process.env.BLOB_READ_WRITE_TOKEN) {
 for (const { pathname, local } of files) {
   try {
     const content = await readFile(path.join(process.cwd(), local), 'utf-8')
-    const blob = await put(pathname, content, { access: 'public', contentType: 'text/csv', allowOverwrite: true })
+    const blob = await put(pathname, content, { access: 'private', contentType: 'text/csv', allowOverwrite: true })
     console.log(`✅ Seeded ${pathname} (${content.length.toLocaleString()} bytes) → ${blob.url}`)
   } catch (err) {
     console.error(`❌ Failed to seed ${pathname}:`, err.message)
