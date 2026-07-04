@@ -221,10 +221,13 @@ export function BTCCalculator() {
         </div>
       </div>
 
-      {/* Main Content Area - Responsive. Mobile: natural height + page scroll (fixed height clips stacked controls). Desktop: fit viewport exactly. */}
-      <div className="container mx-auto px-4 py-1 relative z-10 min-h-[calc(100vh-70px)] sm:h-[calc(100vh-80px)] flex flex-col sm:items-center sm:justify-center">
+      {/* Main Content Area - Responsive. Natural height + page scroll everywhere — an exact
+          viewport-fit height here is fragile (any small change to the header, stats card, or
+          currency picker throws off the whole budget and clips content), so the chart gets a
+          comfortable min-height instead of trying to exactly fill the remaining space. */}
+      <div className="container mx-auto px-4 py-4 relative z-10 flex flex-col items-center">
         {/* Full Window Price History */}
-        <div className="w-full max-w-7xl sm:h-full flex flex-col">
+        <div className="w-full max-w-7xl flex flex-col">
           <BTCPriceHistory onDataUpdate={handleDataUpdate} />
         </div>
 

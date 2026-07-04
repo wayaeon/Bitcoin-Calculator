@@ -704,9 +704,10 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   }
 
   return (
-    <div className={`w-full h-full py-1 flex flex-col ${className}`}>
-      {/* Chart Section - Flexible Height. flex-col so the chart box (flex-1) shrinks to guarantee header/stats/bottom-row always fit on screen. */}
-      <div className="flex-1 min-h-0 relative flex flex-col">
+    <div className={`w-full py-1 flex flex-col ${className}`}>
+      {/* Chart Section — natural height (page scrolls), chart box below gets a fixed
+          min-height instead of trying to flex-fill a bounded parent. */}
+      <div className="relative flex flex-col">
 
         {/* Header Section - Compact and Horizontal */}
         <div className="mb-4 shrink-0">
@@ -988,7 +989,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
         </div>
         
         {/* Chart Container - Maximized Height */}
-        <div className="w-full flex-1 min-h-[240px] sm:min-h-[280px] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-1 sm:pb-1 lg:pb-2 relative mb-2">
+        <div className="w-full h-[340px] sm:h-[420px] lg:h-[500px] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-1 sm:pb-1 lg:pb-2 relative mb-2">
           {isZoomLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-900/40 rounded-lg backdrop-blur-sm">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
