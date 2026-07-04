@@ -98,8 +98,11 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   const [lastPresetRange, setLastPresetRange] = useState<'1D' | '7D' | '30D' | '60D' | '90D' | '6mo' | '1Y' | '5Y' | '10Y' | 'ALL'>('1Y')
   // Each entry = state before that zoom was applied; pop to step back one level
   // data = high-res fetch for that level (null = slice of convertedData)
+  // Stored/fetched in raw USD — currentZoomData (derived below) applies the currency
+  // conversion, so switching currency while zoomed re-scales immediately instead of
+  // leaving stale USD-or-wrong-currency values that make the Y-axis jump wildly.
   const [zoomStack, setZoomStack] = useState<Array<{ left: number; right: number; data: BTCPriceData[] | null }>>([]);
-  const [currentZoomData, setCurrentZoomData] = useState<BTCPriceData[] | null>(null)
+  const [currentZoomDataRaw, setCurrentZoomDataRaw] = useState<BTCPriceData[] | null>(null)
   const [isZoomLoading, setIsZoomLoading] = useState(false)
   const [rangeChangeAsDollar, setRangeChangeAsDollar] = useState(false)
 
@@ -182,6 +185,14 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       marketCap: item.marketCap ? item.marketCap * rate : undefined
     }))
   }, [exchangeRates])
+
+  // Currency-converted view of the zoomed-in window. Re-derives whenever the selected
+  // currency changes, instead of leaving whatever currency happened to be active when
+  // the zoom fetch resolved — that mismatch is what caused the Y-axis to jump wildly.
+  const currentZoomData = useMemo(() =>
+    currentZoomDataRaw ? convertDataToCurrency(currentZoomDataRaw, selectedCurrency) : null,
+    [currentZoomDataRaw, selectedCurrency, convertDataToCurrency]
+  )
 
   // Load data from API instead of CSV
   const loadDataFromAPI = useCallback(async (range: string): Promise<BTCPriceData[]> => {
@@ -386,9 +397,14 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     fetchExchangeRates()
   }, [fetchExchangeRates])
 
-  // Escape = one level back, Alt+Escape = all the way out
+  // Escape = one level back, Alt+Escape = all the way out. Alt+Q = open the currency picker.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'q') {
+        e.preventDefault()
+        setIsCurrencyPickerOpen(v => !v)
+        return
+      }
       if (e.key !== 'Escape' || !isZoomed) return
       e.altKey ? zoomOutAll() : zoomOut()
     }
@@ -614,12 +630,13 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
     if (!isZoomed) setLastPresetRange(timeRange)
     setRefAreaLeft(null); setRefAreaRight(null)
 
-    // Push current state (including current high-res data) onto stack
-    setZoomStack(prev => [...prev, { left, right, data: currentZoomData }])
+    // Push current state (raw USD, so re-selecting currency later re-converts correctly) onto stack
+    setZoomStack(prev => [...prev, { left, right, data: currentZoomDataRaw }])
     setLeft(startIdx); setRight(endIdx)
     setIsZoomed(true)
 
-    // Fetch high-res data for this exact window
+    // Fetch high-res data for this exact window — stored raw (USD); currentZoomData
+    // above derives the currency-converted view from this.
     setIsZoomLoading(true)
     try {
       const fromSec = Math.floor(startTs / 1000)
@@ -627,7 +644,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       const res = await fetch(`/api/btc-chart-data?from=${fromSec}&to=${toSec}`)
       const json = await res.json()
       if (json.success && json.data?.length) {
-        setCurrentZoomData(json.data)
+        setCurrentZoomDataRaw(json.data)
       }
     } catch { /* fall back to sliced data */ }
     finally { setIsZoomLoading(false) }
@@ -639,7 +656,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
       const restored = prev[prev.length - 1] ?? { left: 0, right: 0, data: null }
       const next = prev.slice(0, -1)
       setLeft(restored.left); setRight(restored.right)
-      setCurrentZoomData(restored.data)
+      setCurrentZoomDataRaw(restored.data)
       setIsZoomed(next.length > 0)
       if (next.length === 0) setTimeRange(lastPresetRange)
       return next
@@ -651,7 +668,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
   const zoomOutAll = () => {
     setZoomStack([])
     setLeft(0); setRight(0)
-    setCurrentZoomData(null)
+    setCurrentZoomDataRaw(null)
     setIsZoomed(false)
     setTimeRange(lastPresetRange)
     setRefAreaLeft(null); setRefAreaRight(null)
@@ -707,6 +724,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                 <PopoverTrigger asChild>
                   <button
                     type="button"
+                    title="Change currency (Alt+Q)"
                     className="h-8 w-[5.75rem] sm:w-24 px-2 flex items-center justify-between gap-1 rounded-md border border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 hover:border-gray-500 data-[state=open]:border-orange-500/60 data-[state=open]:bg-gray-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 transition-colors shrink-0 text-sm"
                   >
                     <span className="flex items-center gap-1.5 truncate">
