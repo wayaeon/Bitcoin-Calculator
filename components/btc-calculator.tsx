@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -67,6 +67,15 @@ export function BTCCalculator() {
   const [priceHistoryData, setPriceHistoryData] = useState<any[]>([])
   const [selectedCurrency, setSelectedCurrency] = useState('USD')
   const [selectedCurrencySymbol, setSelectedCurrencySymbol] = useState('$')
+
+  // Stable identity — BTCPriceHistory includes this in a useEffect dependency array and
+  // calls it from inside that effect. A fresh inline function here would make the effect
+  // re-run on every parent render, which recalls this, which re-renders the parent, forever.
+  const handleDataUpdate = useCallback((data: any[], currency: string, currencySymbol: string) => {
+    setPriceHistoryData(data)
+    setSelectedCurrency(currency)
+    setSelectedCurrencySymbol(currencySymbol)
+  }, [])
 
   const handleCalculate = async () => {
     try {
@@ -216,13 +225,7 @@ export function BTCCalculator() {
       <div className="container mx-auto px-4 py-1 relative z-10 min-h-[calc(100vh-70px)] sm:h-[calc(100vh-80px)] flex flex-col sm:items-center sm:justify-center">
         {/* Full Window Price History */}
         <div className="w-full max-w-7xl sm:h-full flex flex-col">
-          <BTCPriceHistory
-            onDataUpdate={(data, currency, currencySymbol) => {
-              setPriceHistoryData(data)
-              setSelectedCurrency(currency)
-              setSelectedCurrencySymbol(currencySymbol)
-            }}
-          />
+          <BTCPriceHistory onDataUpdate={handleDataUpdate} />
         </div>
 
         {/* Single Expandable Calculator Widget - Responsive Positioning */}

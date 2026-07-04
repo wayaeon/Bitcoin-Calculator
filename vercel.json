@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/update-btc-data/update-btc-daily",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/update-currency-rates",
+      "schedule": "0 8 * * *"
     }
   ]
 } 
