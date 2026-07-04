@@ -707,7 +707,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="h-8 w-[5.75rem] sm:w-24 px-2 flex items-center justify-between gap-1 rounded-md border border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 transition-colors shrink-0 text-sm"
+                    className="h-8 w-[5.75rem] sm:w-24 px-2 flex items-center justify-between gap-1 rounded-md border border-gray-600 bg-gray-800/50 text-white hover:bg-gray-800/70 hover:border-gray-500 data-[state=open]:border-orange-500/60 data-[state=open]:bg-gray-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 transition-colors shrink-0 text-sm"
                   >
                     <span className="flex items-center gap-1.5 truncate">
                       <span className="text-base leading-none">{selectedCurrencyInfo?.flag}</span>
@@ -716,14 +716,28 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                     <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-64 p-0 bg-gray-900 border-gray-700">
-                  <Command className="bg-transparent" filter={(value, search) => value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0}>
+                <PopoverContent
+                  align="start"
+                  className="w-72 p-0 bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
+                >
+                  {/* Thin Bitcoin-branded accent line instead of a plain top border */}
+                  <div className="h-px bg-gradient-to-r from-transparent via-orange-500/60 to-transparent" />
+                  <Command
+                    className="bg-transparent [&_[cmdk-input-wrapper]]:border-white/10 [&_[cmdk-input-wrapper]]:px-3.5 [&_[cmdk-input-wrapper]]:py-2.5 [&_[cmdk-input-wrapper]_svg]:text-orange-400/70"
+                    filter={(value, search) => value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0}
+                  >
                     <CommandInput
                       placeholder="Search currency or country..."
-                      className="text-white placeholder:text-gray-500"
+                      className="text-white text-sm placeholder:text-gray-500"
                     />
-                    <CommandList className="max-h-72 scroll-smooth overscroll-contain">
-                      <CommandEmpty className="text-gray-400">No currency found.</CommandEmpty>
+                    <CommandList
+                      className="max-h-72 scroll-smooth overscroll-contain p-1.5
+                        [&::-webkit-scrollbar]:w-1.5
+                        [&::-webkit-scrollbar-track]:bg-transparent
+                        [&::-webkit-scrollbar-thumb]:bg-gray-700 [&::-webkit-scrollbar-thumb]:rounded-full
+                        hover:[&::-webkit-scrollbar-thumb]:bg-orange-500/40"
+                    >
+                      <CommandEmpty className="text-gray-500 text-sm py-8 text-center">No currency found.</CommandEmpty>
                       <CommandGroup>
                         {CURRENCIES.map((currency) => (
                           <CommandItem
@@ -733,15 +747,15 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
                               setSelectedCurrency(currency.code)
                               setIsCurrencyPickerOpen(false)
                             }}
-                            className="flex items-center justify-between gap-2 py-1.5 text-white data-[selected=true]:bg-gray-700 cursor-pointer"
+                            className="flex items-center justify-between gap-2 my-0.5 rounded-lg py-2 px-2.5 text-white hover:bg-orange-500/10 data-[selected='true']:!bg-orange-500/10 data-[selected='true']:!text-white cursor-pointer transition-colors"
                           >
-                            <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="flex items-center gap-2 min-w-0">
                               <span className="text-base leading-none shrink-0">{currency.flag}</span>
-                              <span className="font-mono font-semibold text-sm shrink-0">{currency.code}</span>
-                              <span className="text-gray-400 text-xs truncate">{currency.name}</span>
+                              <span className="font-mono font-semibold text-sm shrink-0 tracking-wide">{currency.code}</span>
+                              <span className="text-gray-500 text-xs truncate">{currency.name}</span>
                             </span>
                             {currency.code === selectedCurrency && (
-                              <Check className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                              <Check className="h-4 w-4 text-orange-400 shrink-0" />
                             )}
                           </CommandItem>
                         ))}
