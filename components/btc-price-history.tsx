@@ -705,8 +705,10 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
 
   return (
     <div className={`w-full py-1 flex flex-col ${className}`}>
-      {/* Chart Section — natural height (page scrolls), chart box below gets a fixed
-          min-height instead of trying to flex-fill a bounded parent. */}
+      {/* Chart Section — natural height. The chart box below sizes itself via a direct
+          min-height calc (fills the viewport when there's room, floors at a comfortable
+          size otherwise) instead of a flex-1 grow chain, which Recharts' ResponsiveContainer
+          measures unreliably through multiple nested levels. */}
       <div className="relative flex flex-col">
 
         {/* Header Section - Compact and Horizontal */}
@@ -989,7 +991,7 @@ export const BTCPriceHistory = React.memo(function BTCPriceHistory({ className, 
         </div>
         
         {/* Chart Container - Maximized Height */}
-        <div className="w-full h-[340px] sm:h-[420px] lg:h-[500px] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-1 sm:pb-1 lg:pb-2 relative mb-2">
+        <div className="w-full h-[max(340px,calc(100vh-400px))] bg-gray-800/20 rounded-lg border border-gray-700/30 p-3 sm:p-4 lg:p-6 pb-1 sm:pb-1 lg:pb-2 relative mb-2">
           {isZoomLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-900/40 rounded-lg backdrop-blur-sm">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>

@@ -221,10 +221,10 @@ export function BTCCalculator() {
         </div>
       </div>
 
-      {/* Main Content Area - Responsive. Natural height + page scroll everywhere — an exact
-          viewport-fit height here is fragile (any small change to the header, stats card, or
-          currency picker throws off the whole budget and clips content), so the chart gets a
-          comfortable min-height instead of trying to exactly fill the remaining space. */}
+      {/* Main Content Area - Responsive. Natural (non-flex-grow) height here; the chart itself
+          sizes to fill the viewport via a direct min-height calc (see btc-price-history.tsx)
+          instead of a multi-level flex-1 chain, which Recharts' ResponsiveContainer measures
+          unreliably through. */}
       <div className="container mx-auto px-4 py-4 relative z-10 flex flex-col items-center">
         {/* Full Window Price History */}
         <div className="w-full max-w-7xl flex flex-col">
